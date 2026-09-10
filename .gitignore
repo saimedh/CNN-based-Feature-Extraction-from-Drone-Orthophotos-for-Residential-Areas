@@ -30,8 +30,11 @@ checkpoints/
 logs/
 *.log
 
-# Outputs & Scratch
-outputs/
+# Outputs (archives ignored)
+outputs/*.zip
+outputs/**/*.zip
+
+# Scratch
 scratch/
 
 # Temporary / Session files

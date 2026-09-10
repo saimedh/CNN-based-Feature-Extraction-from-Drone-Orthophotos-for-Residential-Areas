@@ -1,0 +1,147 @@
+{
+  "type": "FeatureCollection",
+  "crs": {
+    "type": "name",
+    "properties": {
+      "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+    }
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.62496,
+              12.936103999999998
+            ],
+            [
+              77.6249,
+              12.935944
+            ],
+            [
+              77.62496,
+              12.935944
+            ],
+            [
+              77.62496,
+              12.936103999999998
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "feature_id": "888c0fe3-ee25-4ff0-8ffa-28b47a7fa519",
+        "class_id": 3,
+        "class": "vegetation",
+        "area_sq_m": 57.62,
+        "centroid_lon": 77.62494,
+        "centroid_lat": 12.93599733
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.62536,
+              12.935863999999999
+            ],
+            [
+              77.62519999999999,
+              12.935784
+            ],
+            [
+              77.62536,
+              12.935784
+            ],
+            [
+              77.62536,
+              12.935863999999999
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "feature_id": "17e77f92-ddf4-4ab4-b3b4-0d8c7d80f1b5",
+        "class_id": 3,
+        "class": "vegetation",
+        "area_sq_m": 76.83,
+        "centroid_lon": 77.62530667,
+        "centroid_lat": 12.93581067
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.62474,
+              12.935863999999999
+            ],
+            [
+              77.6246,
+              12.935773999999999
+            ],
+            [
+              77.62474,
+              12.935773999999999
+            ],
+            [
+              77.62474,
+              12.935863999999999
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "feature_id": "522a34ab-4dff-4023-9a7c-40416b76295d",
+        "class_id": 3,
+        "class": "vegetation",
+        "area_sq_m": 75.63,
+        "centroid_lon": 77.62469333,
+        "centroid_lat": 12.935804
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              77.62496,
+              12.935544
+            ],
+            [
+              77.6249,
+              12.935383999999999
+            ],
+            [
+              77.62496,
+              12.935383999999999
+            ],
+            [
+              77.62496,
+              12.935544
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "feature_id": "4af3185e-16ef-48bc-bb65-e195bf48ca10",
+        "class_id": 3,
+        "class": "vegetation",
+        "area_sq_m": 57.62,
+        "centroid_lon": 77.62494,
+        "centroid_lat": 12.93543733
+      }
+    }
+  ]
+}

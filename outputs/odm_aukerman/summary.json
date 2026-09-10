@@ -1,0 +1,23 @@
+{
+  "source_orthophoto": "data/raw/odm_aukerman_orthophoto.tif",
+  "location": "Aukerman Park, Ohio, USA (41.3038N, 81.7505W)",
+  "drone_camera": "SONY DSC-WX220",
+  "crs": "EPSG:4326",
+  "classes_extracted": {
+    "building": {
+      "count": 4,
+      "total_area_m2": 94.39,
+      "total_usable_solar_m2": 66.1,
+      "total_solar_kwp": 9.91,
+      "annual_clean_kwh": 14369.0
+    },
+    "road": {
+      "count": 14,
+      "total_area_m2": 689.14
+    },
+    "vegetation": {
+      "count": 0,
+      "total_area_m2": 0
+    }
+  }
+}
