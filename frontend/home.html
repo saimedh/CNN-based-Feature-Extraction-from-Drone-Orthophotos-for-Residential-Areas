@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OrthoSeg — AI-Powered Drone Orthophoto Feature Extraction</title>
+  <meta name="description" content="Extract building footprints, roads and vegetation from drone orthophotos using CNN-based semantic segmentation. Automated GeoJSON export for GIS workflows." />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="home.css" />
+</head>
+<body>
+
+<!-- ─── NAVBAR ─── -->
+<nav class="home-nav">
+  <div class="home-nav-inner">
+    <a href="home.html" class="home-nav-brand">
+      <div class="home-nav-logo">
+        <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="20" cy="20" r="18" stroke="url(#hg1)" stroke-width="2"/>
+          <path d="M20 8 L28 16 L20 12 L12 16 Z" fill="url(#hg1)"/>
+          <path d="M20 32 L28 24 L20 28 L12 24 Z" fill="url(#hg1)"/>
+          <circle cx="20" cy="20" r="4" fill="url(#hg1)"/>
+          <defs>
+            <linearGradient id="hg1" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#38bdf8"/><stop offset="1" stop-color="#6366f1"/>
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+      <span class="home-nav-title">OrthoSeg</span>
+    </a>
+    <div class="home-nav-links">
+      <a href="#features" class="home-nav-link">Features</a>
+      <a href="#pipeline" class="home-nav-link">Pipeline</a>
+      <a href="#models" class="home-nav-link">Models</a>
+      <a href="#usecases" class="home-nav-link">Use Cases</a>
+    </div>
+    <div class="home-nav-actions">
+      <a href="demo.html" class="btn-ghost">Try Demo</a>
+      <a href="login.html" class="btn-cta-sm">Sign In</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ─── HERO ─── -->
+<section class="hero">
+  <div class="hero-bg-grid"></div>
+  <div class="hero-glow hero-glow-1"></div>
+  <div class="hero-glow hero-glow-2"></div>
+
+  <div class="hero-content">
+    <div class="hero-badge">
+      <i data-lucide="sparkles"></i>
+      <span>CNN-Powered Geospatial AI</span>
+    </div>
+    <h1 class="hero-title">
+      Extract Features from<br/>
+      <span class="hero-gradient">Drone Imagery</span> with AI
+    </h1>
+    <p class="hero-sub">
+      Automated semantic segmentation of high-resolution orthophotos to detect
+      <strong>buildings</strong>, <strong>roads</strong>, and <strong>vegetation</strong> — 
+      exported as production-ready GeoJSON for your GIS pipeline.
+    </p>
+    <div class="hero-ctas">
+      <a href="demo.html" class="btn-cta-lg">
+        <i data-lucide="play-circle"></i>
+        <span>Try Live Demo</span>
+      </a>
+      <a href="login.html" class="btn-outline-lg">
+        <i data-lucide="log-in"></i>
+        <span>Sign In to Dashboard</span>
+      </a>
+    </div>
+    <div class="hero-stats-row">
+      <div class="hero-stat">
+        <span class="hero-stat-num" data-target="75">0</span><span class="hero-stat-pct">%</span>
+        <span class="hero-stat-lbl">Building IoU</span>
+      </div>
+      <div class="hero-stat-divider"></div>
+      <div class="hero-stat">
+        <span class="hero-stat-num" data-target="80">0</span><span class="hero-stat-pct">%</span>
+        <span class="hero-stat-lbl">Road F1 Score</span>
+      </div>
+      <div class="hero-stat-divider"></div>
+      <div class="hero-stat">
+        <span class="hero-stat-num" data-target="5">0</span><span class="hero-stat-unit"> min</span>
+        <span class="hero-stat-lbl">Per km² Tile Set</span>
+      </div>
+      <div class="hero-stat-divider"></div>
+      <div class="hero-stat">
+        <span class="hero-stat-num" data-target="4">0</span><span class="hero-stat-unit"> classes</span>
+        <span class="hero-stat-lbl">Segmentation Classes</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Animated satellite visual -->
+  <div class="hero-visual">
+    <div class="hero-orbit">
+      <div class="orbit-ring orbit-ring-1"></div>
+      <div class="orbit-ring orbit-ring-2"></div>
+      <div class="orbit-ring orbit-ring-3"></div>
+      <div class="orbit-dot orbit-dot-1"><i data-lucide="building-2"></i></div>
+      <div class="orbit-dot orbit-dot-2"><i data-lucide="navigation"></i></div>
+      <div class="orbit-dot orbit-dot-3"><i data-lucide="trees"></i></div>
+      <div class="orbit-center">
+        <i data-lucide="cpu"></i>
+        <span>U-Net</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── FEATURES ─── -->
+<section class="section features-section" id="features">
+  <div class="section-inner">
+    <div class="section-header">
+      <span class="section-tag"><i data-lucide="zap"></i> Capabilities</span>
+      <h2 class="section-title">End-to-End Geospatial Intelligence</h2>
+      <p class="section-sub">From raw drone imagery to production-ready vector data in minutes</p>
+    </div>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon feature-icon-cyan"><i data-lucide="upload-cloud"></i></div>
+        <h3 class="feature-name">Upload & Ingest</h3>
+        <p class="feature-desc">Drag-and-drop GeoTIFF orthophotos up to 500 MB. Automatic CRS detection and metadata extraction.</p>
+        <div class="feature-tags">
+          <span>GeoTIFF</span><span>EPSG:4326</span><span>UTM</span>
+        </div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon feature-icon-purple"><i data-lucide="grid-3x3"></i></div>
+        <h3 class="feature-name">Auto-Tiling</h3>
+        <p class="feature-desc">Splits large orthophotos into 256×256 overlapping patches with 15% overlap to eliminate edge artifacts.</p>
+        <div class="feature-tags">
+          <span>256×256</span><span>15% Overlap</span><span>Nodata Filter</span>
+        </div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon feature-icon-amber"><i data-lucide="brain"></i></div>
+        <h3 class="feature-name">CNN Segmentation</h3>
+        <p class="feature-desc">U-Net with ResNet34 encoder, ImageNet pretrained. Mixed precision FP16 inference for 2× GPU speedup.</p>
+        <div class="feature-tags">
+          <span>U-Net</span><span>ResNet34</span><span>FP16</span>
+        </div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon feature-icon-green"><i data-lucide="shapes"></i></div>
+        <h3 class="feature-name">Vectorization</h3>
+        <p class="feature-desc">Morphological cleanup, Douglas-Peucker polygon simplification, full georeferencing preserved on export.</p>
+        <div class="feature-tags">
+          <span>GeoJSON</span><span>Shapefile</span><span>QGIS</span>
+        </div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon feature-icon-rose"><i data-lucide="sun"></i></div>
+        <h3 class="feature-name">Solar Analysis</h3>
+        <p class="feature-desc">Automatic rooftop solar potential estimation — usable area, kWp capacity, annual MWh, CO₂ offset per building.</p>
+        <div class="feature-tags">
+          <span>kWp</span><span>MWh/yr</span><span>CO₂ Offset</span>
+        </div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon feature-icon-teal"><i data-lucide="map"></i></div>
+        <h3 class="feature-name">Interactive Map</h3>
+        <p class="feature-desc">Leaflet-powered map viewer with satellite basemaps, layer toggles, feature popups, and geo heatmaps.</p>
+        <div class="feature-tags">
+          <span>Leaflet</span><span>Heatmap</span><span>Layers</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── PIPELINE ─── -->
+<section class="section pipeline-section" id="pipeline">
+  <div class="section-inner">
+    <div class="section-header">
+      <span class="section-tag"><i data-lucide="workflow"></i> Architecture</span>
+      <h2 class="section-title">Processing Pipeline</h2>
+      <p class="section-sub">Four-stage fully automated workflow from upload to vector export</p>
+    </div>
+    <div class="pipeline-track">
+      <div class="pipeline-line"></div>
+      <div class="pipeline-step">
+        <div class="pipeline-node pipeline-node-cyan">
+          <i data-lucide="upload"></i>
+        </div>
+        <div class="pipeline-info">
+          <span class="pipeline-num">01</span>
+          <h4 class="pipeline-name">Upload</h4>
+          <p class="pipeline-desc">GeoTIFF orthophoto ingestion with automatic CRS + resolution detection</p>
+        </div>
+      </div>
+      <div class="pipeline-step">
+        <div class="pipeline-node pipeline-node-purple">
+          <i data-lucide="grid-3x3"></i>
+        </div>
+        <div class="pipeline-info">
+          <span class="pipeline-num">02</span>
+          <h4 class="pipeline-name">Tiling</h4>
+          <p class="pipeline-desc">256×256 overlapping tile extraction with affine transform preservation</p>
+        </div>
+      </div>
+      <div class="pipeline-step">
+        <div class="pipeline-node pipeline-node-amber">
+          <i data-lucide="sparkles"></i>
+        </div>
+        <div class="pipeline-info">
+          <span class="pipeline-num">03</span>
+          <h4 class="pipeline-name">CNN Inference</h4>
+          <p class="pipeline-desc">Batched U-Net segmentation with probability map merging via averaging</p>
+        </div>
+      </div>
+      <div class="pipeline-step">
+        <div class="pipeline-node pipeline-node-green">
+          <i data-lucide="shapes"></i>
+        </div>
+        <div class="pipeline-info">
+          <span class="pipeline-num">04</span>
+          <h4 class="pipeline-name">Vectorize</h4>
+          <p class="pipeline-desc">Morphological cleanup → rasterio polygonize → Douglas-Peucker → GeoJSON</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── MODELS ─── -->
+<section class="section models-section-home" id="models">
+  <div class="section-inner">
+    <div class="section-header">
+      <span class="section-tag"><i data-lucide="cpu"></i> Deep Learning</span>
+      <h2 class="section-title">CNN Architecture</h2>
+      <p class="section-sub">State-of-the-art encoder-decoder segmentation powered by PyTorch</p>
+    </div>
+    <div class="model-showcase">
+      <div class="model-main-card">
+        <div class="model-arch-badge">ACTIVE MODEL</div>
+        <div class="model-arch-header">
+          <div class="model-arch-icon"><i data-lucide="network"></i></div>
+          <div>
+            <h3 class="model-arch-name">U-Net + ResNet34</h3>
+            <p class="model-arch-type">Encoder-Decoder with Skip Connections</p>
+          </div>
+        </div>
+        <div class="model-specs-grid">
+          <div class="model-spec">
+            <span class="spec-val">24.4M</span>
+            <span class="spec-lbl">Parameters</span>
+          </div>
+          <div class="model-spec">
+            <span class="spec-val">256×256</span>
+            <span class="spec-lbl">Input Size</span>
+          </div>
+          <div class="model-spec">
+            <span class="spec-val">4</span>
+            <span class="spec-lbl">Classes</span>
+          </div>
+          <div class="model-spec">
+            <span class="spec-val">FP16</span>
+            <span class="spec-lbl">Precision</span>
+          </div>
+        </div>
+        <div class="model-training-info">
+          <div class="training-item">
+            <span class="ti-key">Loss</span>
+            <span class="ti-val">0.5 × Dice + 0.5 × CrossEntropy</span>
+          </div>
+          <div class="training-item">
+            <span class="ti-key">Optimizer</span>
+            <span class="ti-val">AdamW (lr=1e-4, cosine annealing)</span>
+          </div>
+          <div class="training-item">
+            <span class="ti-key">Pre-training</span>
+            <span class="ti-val">ImageNet 1K</span>
+          </div>
+          <div class="training-item">
+            <span class="ti-key">Augmentation</span>
+            <span class="ti-val">Albumentations (flip, rotate, jitter)</span>
+          </div>
+        </div>
+      </div>
+      <div class="model-alt-cards">
+        <div class="model-alt-card">
+          <h4>DeepLabV3+</h4>
+          <p>Atrous Spatial Pyramid Pooling for multi-scale context. Excels at road segmentation.</p>
+          <span class="alt-params">26.7M params</span>
+        </div>
+        <div class="model-alt-card">
+          <h4>FPN</h4>
+          <p>Feature Pyramid Network with top-down pathway. Multi-scale feature extraction.</p>
+          <span class="alt-params">22.1M params</span>
+        </div>
+        <div class="model-alt-card">
+          <h4>MAnet</h4>
+          <p>Multi-scale Attention decoder for precise boundary delineation.</p>
+          <span class="alt-params">32.1M params</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── USE CASES ─── -->
+<section class="section usecases-section" id="usecases">
+  <div class="section-inner">
+    <div class="section-header">
+      <span class="section-tag"><i data-lucide="target"></i> Applications</span>
+      <h2 class="section-title">Built for Real-World Impact</h2>
+      <p class="section-sub">From urban planning to disaster response</p>
+    </div>
+    <div class="usecases-grid">
+      <div class="usecase-card">
+        <div class="usecase-icon usecase-icon-1"><i data-lucide="building"></i></div>
+        <h3>Urban Planning</h3>
+        <p>Automated building footprint extraction for zoning, density analysis, and land-use mapping in rapidly growing cities.</p>
+      </div>
+      <div class="usecase-card">
+        <div class="usecase-icon usecase-icon-2"><i data-lucide="receipt"></i></div>
+        <h3>Property Tax Assessment</h3>
+        <p>Identify unreported construction, calculate built-up area, and support municipal tax authorities with verified GIS data.</p>
+      </div>
+      <div class="usecase-card">
+        <div class="usecase-icon usecase-icon-3"><i data-lucide="shield-alert"></i></div>
+        <h3>Disaster Response</h3>
+        <p>Rapid post-disaster damage assessment by comparing pre- and post-event building footprints and road networks.</p>
+      </div>
+      <div class="usecase-card">
+        <div class="usecase-icon usecase-icon-4"><i data-lucide="map-pin"></i></div>
+        <h3>Land Surveying</h3>
+        <p>Accelerate surveying workflows with automated road, parcel, and vegetation boundary extraction from drone surveys.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── CTA ─── -->
+<section class="section cta-section">
+  <div class="section-inner">
+    <div class="cta-card">
+      <div class="cta-glow"></div>
+      <h2 class="cta-title">Ready to Extract Features?</h2>
+      <p class="cta-sub">Upload your first orthophoto and see AI-powered segmentation in action</p>
+      <div class="cta-buttons">
+        <a href="demo.html" class="btn-cta-lg">
+          <i data-lucide="play-circle"></i>
+          <span>Launch Demo</span>
+        </a>
+        <a href="login.html" class="btn-outline-lg">
+          <i data-lucide="arrow-right"></i>
+          <span>Get Started</span>
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── FOOTER ─── -->
+<footer class="home-footer">
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <div class="footer-logo">
+        <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="20" cy="20" r="18" stroke="url(#fg1)" stroke-width="2"/>
+          <path d="M20 8 L28 16 L20 12 L12 16 Z" fill="url(#fg1)"/>
+          <path d="M20 32 L28 24 L20 28 L12 24 Z" fill="url(#fg1)"/>
+          <circle cx="20" cy="20" r="4" fill="url(#fg1)"/>
+          <defs>
+            <linearGradient id="fg1" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#38bdf8"/><stop offset="1" stop-color="#6366f1"/>
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+      <span>OrthoSeg</span>
+    </div>
+    <div class="footer-tech">
+      <span class="tech-badge">PyTorch</span>
+      <span class="tech-badge">U-Net</span>
+      <span class="tech-badge">ResNet34</span>
+      <span class="tech-badge">Rasterio</span>
+      <span class="tech-badge">FastAPI</span>
+      <span class="tech-badge">Leaflet</span>
+    </div>
+    <p class="footer-copy">CNN-based Feature Extraction from Drone Orthophotos for Residential Areas</p>
+  </div>
+</footer>
+
+<script>
+  // Init Lucide icons
+  document.addEventListener('DOMContentLoaded', () => {
+    if (window.lucide) lucide.createIcons();
+    animateCounters();
+    initScrollAnimations();
+  });
+
+  // Animated counters in hero
+  function animateCounters() {
+    const counters = document.querySelectorAll('.hero-stat-num[data-target]');
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const el = entry.target;
+          const target = parseInt(el.dataset.target);
+          let current = 0;
+          const step = Math.max(1, Math.floor(target / 40));
+          const interval = setInterval(() => {
+            current = Math.min(current + step, target);
+            el.textContent = current;
+            if (current >= target) clearInterval(interval);
+          }, 30);
+          observer.unobserve(el);
+        }
+      });
+    }, { threshold: 0.5 });
+    counters.forEach(c => observer.observe(c));
+  }
+
+  // Scroll-reveal animations
+  function initScrollAnimations() {
+    const els = document.querySelectorAll('.feature-card, .pipeline-step, .model-main-card, .model-alt-card, .usecase-card');
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry, i) => {
+        if (entry.isIntersecting) {
+          setTimeout(() => {
+            entry.target.classList.add('revealed');
+          }, i * 80);
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.15 });
+    els.forEach(el => observer.observe(el));
+  }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OrthoSeg — CNN Drone Orthophoto Feature Extractor</title>
+  <meta name="description" content="Automated semantic segmentation of drone orthophotos to extract building footprints, roads and vegetation with solar rooftop intelligence." />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .user-menu { display:flex; align-items:center; gap:8px; margin-left:10px; }
+    .user-avatar { width:28px; height:28px; border-radius:50%; background:linear-gradient(135deg,#38bdf8,#6366f1); display:flex; align-items:center; justify-content:center; font-size:0.7rem; font-weight:800; color:#fff; flex-shrink:0; }
+    .user-name { font-size:0.78rem; font-weight:500; color:var(--text-secondary); max-width:100px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .btn-logout { background:none; border:1px solid var(--border); border-radius:6px; color:var(--text-muted); font-size:0.72rem; font-weight:600; padding:4px 10px; cursor:pointer; transition:all 0.2s; display:flex; align-items:center; gap:4px; font-family:inherit; }
+    .btn-logout:hover { border-color:rgba(239,68,68,0.4); color:#ef4444; background:rgba(239,68,68,0.08); }
+    .btn-logout [data-lucide] { width:13px; height:13px; }
+    .nav-home-link { color:var(--text-muted); text-decoration:none; font-size:0.78rem; font-weight:500; padding:4px 8px; border-radius:6px; transition:all 0.2s; display:flex; align-items:center; gap:4px; }
+    .nav-home-link:hover { color:var(--text-primary); background:rgba(255,255,255,0.04); }
+    .nav-home-link [data-lucide] { width:13px; height:13px; }
+  </style>
+</head>
+<body>
+
+<!-- NAVBAR -->
+<nav class="navbar">
+  <div class="nav-brand">
+    <div class="nav-logo">
+      <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="20" cy="20" r="18" stroke="url(#ng1)" stroke-width="2"/>
+        <path d="M20 8 L28 16 L20 12 L12 16 Z" fill="url(#ng1)"/>
+        <path d="M20 32 L28 24 L20 28 L12 24 Z" fill="url(#ng1)"/>
+        <circle cx="20" cy="20" r="4" fill="url(#ng1)"/>
+        <defs>
+          <linearGradient id="ng1" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#38bdf8"/><stop offset="1" stop-color="#6366f1"/>
+          </linearGradient>
+        </defs>
+      </svg>
+    </div>
+    <span class="nav-title">OrthoSeg</span>
+    <span class="nav-badge">AI Core</span>
+  </div>
+
+  <div class="nav-tabs">
+    <button class="nav-tab active" id="tab-dashboard" onclick="switchTab('dashboard')">
+      <i data-lucide="layout-dashboard"></i>
+      <span>Dashboard</span>
+    </button>
+    <button class="nav-tab" id="tab-models" onclick="switchTab('models')">
+      <i data-lucide="brain"></i>
+      <span>Models</span>
+    </button>
+    <button class="nav-tab" id="tab-history" onclick="switchTab('history')">
+      <i data-lucide="history"></i>
+      <span>History</span>
+    </button>
+    <button class="nav-tab" id="tab-settings" onclick="switchTab('settings')">
+      <i data-lucide="settings"></i>
+      <span>Settings</span>
+    </button>
+  </div>
+
+  <div class="nav-status">
+    <a href="home.html" class="nav-home-link"><i data-lucide="home"></i> Home</a>
+    <div class="api-status" id="api-status">
+      <span class="status-dot" id="status-dot"></span>
+      <span id="status-label">Connecting...</span>
+    </div>
+    <div class="user-menu" id="user-menu">
+      <div class="user-avatar" id="user-avatar">?</div>
+      <span class="user-name" id="user-name"></span>
+      <button class="btn-logout" onclick="logoutUser()">
+        <i data-lucide="log-out"></i> Logout
+      </button>
+    </div>
+  </div>
+</nav>
+
+<!-- DASHBOARD -->
+<div id="panel-dashboard">
+<main class="app-layout">
+
+  <!-- LEFT PANEL -->
+  <aside class="left-panel">
+
+    <!-- ACTIVE DATASET SELECTOR CARD -->
+    <div class="card dataset-card" style="border: 1px solid rgba(56, 189, 248, 0.3); background: rgba(15, 23, 42, 0.75);">
+      <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span class="card-icon" style="color:#38bdf8;"><i data-lucide="map-pin"></i></span>
+          <span class="card-title">Live Dataset / Run</span>
+        </div>
+        <span class="nav-badge" id="live-badge" style="background:rgba(56,189,248,0.2); color:#38bdf8; font-size:0.7rem;">Live</span>
+      </div>
+      <div class="api-input-row" style="margin-top:8px;">
+        <label class="input-label">Select Processed Orthophoto</label>
+        <select class="input-field" id="dataset-select" onchange="onDatasetSelectChange()" style="font-weight:500;">
+          <option value="odm_aukerman">OpenDroneMap Aukerman (Ohio, USA)</option>
+          <option value="demo_residential_ortho">Residential Demo (Bangalore)</option>
+        </select>
+      </div>
+      <div class="dataset-quick-btns" style="display:flex; gap:8px; margin-top:10px;">
+        <button class="btn-secondary" style="flex:1; padding:7px; font-size:0.78rem; display:flex; align-items:center; justify-content:center; gap:4px;" onclick="loadProcessedRun('odm_aukerman')">
+          <i data-lucide="crosshair" style="width:14px; height:14px;"></i> Aukerman
+        </button>
+        <button class="btn-secondary" style="flex:1; padding:7px; font-size:0.78rem; display:flex; align-items:center; justify-content:center; gap:4px;" onclick="loadProcessedRun('demo_residential_ortho')">
+          <i data-lucide="home" style="width:14px; height:14px;"></i> Demo Ortho
+        </button>
+      </div>
+    </div>
+
+    <div class="card upload-card">
+      <div class="card-header">
+        <span class="card-icon"><i data-lucide="satellite"></i></span>
+        <span class="card-title">Input Orthophoto</span>
+      </div>
+
+      <!-- Mode Selector -->
+      <div class="upload-mode-toggle">
+        <button class="mode-btn active" id="mode-single-btn">
+          <i data-lucide="file-text"></i>
+          <span>Single File</span>
+        </button>
+        <button class="mode-btn" id="mode-folder-btn">
+          <i data-lucide="folder"></i>
+          <span>Folder Option</span>
+        </button>
+      </div>
+
+      <!-- SINGLE FILE MODE -->
+      <div id="mode-single-section">
+        <div class="drop-zone" id="drop-zone"
+             ondragover="onDragOver(event)" ondragleave="onDragLeave(event)"
+             ondrop="onDrop(event)" onclick="document.getElementById('file-input').click()">
+          <div class="drop-icon">
+            <i data-lucide="upload-cloud"></i>
+          </div>
+          <p class="drop-title">Drag &amp; Drop Your File</p>
+          <p class="drop-sub">or click to browse local file</p>
+          <p class="drop-hint">All file types supported &bull; Max 500 MB</p>
+          <input type="file" id="file-input" style="display:none" onchange="onFileSelect(event)" />
+        </div>
+
+        <div class="file-info" id="file-info" style="display:none">
+          <div class="file-meta">
+            <span class="file-icon"><i data-lucide="file-check"></i></span>
+            <div class="file-details">
+              <span class="file-name" id="file-name">-</span>
+              <span class="file-size" id="file-size">-</span>
+            </div>
+            <button class="btn-clear" onclick="clearFile()"><i data-lucide="x"></i></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- FOLDER MODE -->
+      <div id="mode-folder-section" style="display:none">
+        <!-- Client Folder Upload -->
+        <div class="folder-action-box" onclick="document.getElementById('folder-input').click()">
+          <span class="folder-action-icon"><i data-lucide="folder-up"></i></span>
+          <div class="folder-action-text">
+            <div class="folder-action-title">Browse Folder from PC</div>
+            <div class="folder-action-sub">Select folder containing image files (TIF, PNG, JPG, BMP, JP2…)</div>
+          </div>
+          <input type="file" id="folder-input" webkitdirectory directory multiple style="display:none" onchange="onFolderSelect(event)" />
+        </div>
+
+        <div class="folder-divider"><span>OR SERVER DIRECTORY</span></div>
+
+        <!-- Server Directory Scan -->
+        <div class="server-scan-box">
+          <label class="input-label">Server Folder Path</label>
+          <div class="server-scan-row">
+            <input class="input-field" id="server-folder-path" type="text" value="data/raw" placeholder="e.g. data/raw" />
+            <button class="btn-scan" id="btn-scan">
+              <i data-lucide="search"></i>
+              <span>Scan</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Discovered files list -->
+        <div id="folder-files-wrap" style="display:none" class="folder-files-container">
+          <div class="folder-files-header">
+            <span class="folder-files-title">Discovered (<span id="folder-files-count">0</span>)</span>
+            <div class="folder-actions-row">
+              <button class="btn-text-xs" onclick="toggleAllFolderFiles(true)">All</button>
+              <button class="btn-text-xs" onclick="toggleAllFolderFiles(false)">None</button>
+            </div>
+          </div>
+          <div class="folder-file-list" id="folder-file-list"></div>
+        </div>
+      </div>
+
+      <div class="api-input-row">
+        <label class="input-label">API Endpoint</label>
+        <input class="input-field" id="api-endpoint" type="text" value="http://localhost:8000" />
+      </div>
+
+      <button class="btn-primary" id="btn-process" disabled>
+        <i data-lucide="sparkles" id="btn-icon"></i>
+        <span id="btn-label">Select a file to start</span>
+        <div class="btn-spinner" id="btn-spinner" style="display:none"></div>
+      </button>
+
+      <div class="progress-wrap" id="progress-wrap" style="display:none">
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" id="progress-fill"></div>
+        </div>
+        <span class="progress-text" id="progress-text">Uploading...</span>
+      </div>
+    </div>
+
+    <!-- Active Batch File Switcher (visible after batch process) -->
+    <div class="card batch-switcher-card" id="batch-switcher-card" style="display:none">
+      <div class="card-header">
+        <span class="card-icon"><i data-lucide="layers-2"></i></span>
+        <span class="card-title">Viewing Orthophoto</span>
+      </div>
+      <select class="input-field" id="batch-active-file-select" onchange="onBatchActiveFileChange()">
+      </select>
+    </div>
+
+    <div class="card layers-card">
+      <div class="card-header">
+        <span class="card-icon"><i data-lucide="layers"></i></span>
+        <span class="card-title">Map Layers</span>
+      </div>
+      <div class="layer-list">
+        <div class="layer-item">
+          <label class="layer-toggle">
+            <input type="checkbox" id="layer-buildings" checked onchange="toggleLayer('building')" />
+            <span class="toggle-track"></span>
+          </label>
+          <span class="layer-dot layer-dot-building"></span>
+          <span class="layer-name">Buildings</span>
+          <span class="layer-count" id="count-buildings">-</span>
+        </div>
+        <div class="layer-item">
+          <label class="layer-toggle">
+            <input type="checkbox" id="layer-roads" checked onchange="toggleLayer('road')" />
+            <span class="toggle-track"></span>
+          </label>
+          <span class="layer-dot layer-dot-road"></span>
+          <span class="layer-name">Roads</span>
+          <span class="layer-count" id="count-roads">-</span>
+        </div>
+        <div class="layer-item">
+          <label class="layer-toggle">
+            <input type="checkbox" id="layer-vegetation" checked onchange="toggleLayer('vegetation')" />
+            <span class="toggle-track"></span>
+          </label>
+          <span class="layer-dot layer-dot-vegetation"></span>
+          <span class="layer-name">Vegetation</span>
+          <span class="layer-count" id="count-vegetation">-</span>
+        </div>
+        <!-- Heatmap Toggle -->
+        <div class="layer-item" style="border-top:1px solid var(--border); padding-top:8px; margin-top:4px;">
+          <label class="layer-toggle">
+            <input type="checkbox" id="layer-heatmap" onchange="toggleHeatmap()" />
+            <span class="toggle-track"></span>
+          </label>
+          <span class="layer-dot" style="background: linear-gradient(135deg, #ff6b35, #ff0844);"></span>
+          <span class="layer-name">Geo Heatmap</span>
+          <span class="layer-count" id="count-heatmap" style="color:#ff6b35;">off</span>
+        </div>
+      </div>
+      <!-- Heatmap Options -->
+      <div id="heatmap-options" style="display:none; margin-top:8px; padding:8px; background:rgba(255,107,53,0.06); border-radius:8px; border:1px solid rgba(255,107,53,0.15);">
+        <label class="input-label" style="font-size:0.7rem; color:#ff6b35;">Intensity Metric</label>
+        <select class="input-field" id="heatmap-intensity" onchange="refreshHeatmap()" style="font-size:0.78rem; padding:5px 8px;">
+          <option value="area">Feature Area</option>
+          <option value="count">Feature Count</option>
+          <option value="solar_kwp">Solar kWp</option>
+        </select>
+        <label class="input-label" style="font-size:0.7rem; color:#ff6b35; margin-top:6px;">Radius</label>
+        <input type="range" class="input-field" id="heatmap-radius" min="10" max="60" value="25" step="5" oninput="updateHeatmapRadius(this.value)" style="padding:2px;" />
+      </div>
+      <div class="download-row" id="download-row" style="display:none">
+        <button class="btn-download" onclick="downloadGeoJSON('building')">
+          <i data-lucide="building-2"></i> Buildings
+        </button>
+        <button class="btn-download" onclick="downloadGeoJSON('road')">
+          <i data-lucide="navigation"></i> Roads
+        </button>
+        <button class="btn-download" onclick="downloadGeoJSON('vegetation')">
+          <i data-lucide="trees"></i> Vegetation
+        </button>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- MAP -->
+  <section class="map-container">
+    <div id="map"></div>
+
+    <div class="map-info-bar">
+      <span id="map-coords">Hover over map...</span>
+      <span class="sep">|</span>
+      <span id="map-zoom">Zoom: -</span>
+    </div>
+
+    <div class="processing-overlay" id="processing-overlay" style="display:none">
+      <div class="processing-card">
+        <div class="pulse-ring"></div>
+        <div class="processing-icon"><i data-lucide="cpu"></i></div>
+        <p class="processing-title">Analysing Orthophoto</p>
+        <p class="processing-sub" id="processing-sub">Uploading file...</p>
+        <div class="processing-steps">
+          <div class="step" id="step-upload"><span class="step-icon"><i data-lucide="upload"></i></span> Upload</div>
+          <div class="step" id="step-tile"><span class="step-icon"><i data-lucide="grid"></i></span> Tiling</div>
+          <div class="step" id="step-infer"><span class="step-icon"><i data-lucide="sparkles"></i></span> CNN Inference</div>
+          <div class="step" id="step-vec"><span class="step-icon"><i data-lucide="shapes"></i></span> Vectorize</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="map-empty" id="map-empty">
+      <div class="map-empty-icon"><i data-lucide="crosshair"></i></div>
+      <p class="map-empty-title">No Orthophoto Loaded</p>
+      <p class="map-empty-sub">Upload or scan a GeoTIFF to extract features</p>
+    </div>
+  </section>
+
+  <!-- RIGHT PANEL -->
+  <aside class="right-panel">
+
+    <div class="card stats-header-card">
+      <div class="card-header">
+        <span class="card-icon"><i data-lucide="activity"></i></span>
+        <span class="card-title">Feature Statistics</span>
+      </div>
+      <div class="stats-total">
+        <div class="stat-box">
+          <span class="stat-num" id="total-features">-</span>
+          <span class="stat-lbl">Total Features</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-num" id="total-area">-</span>
+          <span class="stat-lbl">Total Area (m&sup2;)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Model Accuracy / Prediction Confidence Card -->
+    <div class="card accuracy-card" id="accuracy-card">
+      <div class="card-header">
+        <span class="card-icon" style="color:#6366f1;"><i data-lucide="target"></i></span>
+        <span class="card-title">Model Accuracy</span>
+        <span class="nav-badge" id="accuracy-badge" style="background:rgba(99,102,241,0.18); color:#6366f1; font-size:0.65rem; margin-left:auto;">Estimating...</span>
+      </div>
+      <!-- Overall Mean Metrics -->
+      <div class="accuracy-overview" id="accuracy-overview">
+        <div class="accuracy-gauge-row">
+          <div class="accuracy-gauge">
+            <svg viewBox="0 0 80 50" class="gauge-svg">
+              <path d="M10 45 A30 30 0 0 1 70 45" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="5" stroke-linecap="round"/>
+              <path d="M10 45 A30 30 0 0 1 70 45" fill="none" stroke="url(#gaugeGrad)" stroke-width="5" stroke-linecap="round" id="gauge-iou-arc" stroke-dasharray="0 94.25"/>
+              <defs><linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#38bdf8"/><stop offset="100%" stop-color="#6366f1"/></linearGradient></defs>
+            </svg>
+            <span class="gauge-value" id="gauge-iou-val">-</span>
+            <span class="gauge-label">mIoU</span>
+          </div>
+          <div class="accuracy-gauge">
+            <svg viewBox="0 0 80 50" class="gauge-svg">
+              <path d="M10 45 A30 30 0 0 1 70 45" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="5" stroke-linecap="round"/>
+              <path d="M10 45 A30 30 0 0 1 70 45" fill="none" stroke="url(#gaugeGrad2)" stroke-width="5" stroke-linecap="round" id="gauge-dice-arc" stroke-dasharray="0 94.25"/>
+              <defs><linearGradient id="gaugeGrad2" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#10b981"/><stop offset="100%" stop-color="#34d399"/></linearGradient></defs>
+            </svg>
+            <span class="gauge-value" id="gauge-dice-val">-</span>
+            <span class="gauge-label">Dice/F1</span>
+          </div>
+          <div class="accuracy-gauge">
+            <svg viewBox="0 0 80 50" class="gauge-svg">
+              <path d="M10 45 A30 30 0 0 1 70 45" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="5" stroke-linecap="round"/>
+              <path d="M10 45 A30 30 0 0 1 70 45" fill="none" stroke="url(#gaugeGrad3)" stroke-width="5" stroke-linecap="round" id="gauge-conf-arc" stroke-dasharray="0 94.25"/>
+              <defs><linearGradient id="gaugeGrad3" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#f59e0b"/><stop offset="100%" stop-color="#fbbf24"/></linearGradient></defs>
+            </svg>
+            <span class="gauge-value" id="gauge-conf-val">-</span>
+            <span class="gauge-label">Confidence</span>
+          </div>
+        </div>
+      </div>
+      <!-- Per-class Accuracy Bars -->
+      <div class="accuracy-per-class" id="accuracy-per-class">
+        <div class="acc-class-row">
+          <span class="acc-cls-dot" style="background:#f59e0b;"></span>
+          <span class="acc-cls-name">Building</span>
+          <div class="acc-bar-wrap"><div class="acc-bar-fill" id="acc-bar-building" style="width:0%;background:linear-gradient(90deg,#f59e0b,#fbbf24);"></div></div>
+          <span class="acc-cls-val" id="acc-val-building">-</span>
+        </div>
+        <div class="acc-class-row">
+          <span class="acc-cls-dot" style="background:#38bdf8;"></span>
+          <span class="acc-cls-name">Road</span>
+          <div class="acc-bar-wrap"><div class="acc-bar-fill" id="acc-bar-road" style="width:0%;background:linear-gradient(90deg,#38bdf8,#7dd3fc);"></div></div>
+          <span class="acc-cls-val" id="acc-val-road">-</span>
+        </div>
+        <div class="acc-class-row">
+          <span class="acc-cls-dot" style="background:#10b981;"></span>
+          <span class="acc-cls-name">Vegetation</span>
+          <div class="acc-bar-wrap"><div class="acc-bar-fill" id="acc-bar-vegetation" style="width:0%;background:linear-gradient(90deg,#10b981,#34d399);"></div></div>
+          <span class="acc-cls-val" id="acc-val-vegetation">-</span>
+        </div>
+      </div>
+      <div class="accuracy-model-info" id="accuracy-model-info" style="margin-top:8px; padding-top:8px; border-top:1px solid var(--border); font-size:0.68rem; color:var(--text-muted); display:flex; gap:8px; justify-content:space-between;">
+        <span id="acc-model-arch">-</span>
+        <span id="acc-model-encoder">-</span>
+      </div>
+    </div>
+
+    <!-- Solar Rooftop Potential Card -->
+    <div class="card solar-card" id="solar-card">
+      <div class="card-header">
+        <span class="card-icon solar-header-icon"><i data-lucide="sun"></i></span>
+        <span class="card-title">Solar Energy Potential</span>
+      </div>
+      <div class="solar-stats-grid">
+        <div class="solar-stat">
+          <span class="solar-val" id="solar-kwp">-</span>
+          <span class="solar-lbl">Solar PV (kWp)</span>
+        </div>
+        <div class="solar-stat">
+          <span class="solar-val" id="solar-mwh">-</span>
+          <span class="solar-lbl">Annual MWh</span>
+        </div>
+        <div class="solar-stat">
+          <span class="solar-val" id="solar-co2">-</span>
+          <span class="solar-lbl">CO&#8322; Offset (t/yr)</span>
+        </div>
+        <div class="solar-stat">
+          <span class="solar-val" id="solar-usable">-</span>
+          <span class="solar-lbl">Usable Roof (m²)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Building card -->
+    <div class="class-card class-card-building">
+      <div class="class-card-header">
+        <div class="class-icon class-icon-building"><i data-lucide="building-2"></i></div>
+        <div class="class-info">
+          <span class="class-name">Buildings</span>
+          <span class="class-count" id="stat-building-count">- features</span>
+        </div>
+        <span class="class-color-dot dot-building"></span>
+      </div>
+      <div class="class-area">
+        <span class="area-value" id="stat-building-area">-</span>
+        <span class="area-unit">m&sup2;</span>
+      </div>
+      <div class="class-bar-wrap">
+        <div class="class-bar-bg">
+          <div class="class-bar-fill bar-building" id="bar-building" style="width:0%"></div>
+        </div>
+        <span class="class-pct" id="pct-building">0%</span>
+      </div>
+    </div>
+
+    <!-- Road card -->
+    <div class="class-card class-card-road">
+      <div class="class-card-header">
+        <div class="class-icon class-icon-road"><i data-lucide="navigation"></i></div>
+        <div class="class-info">
+          <span class="class-name">Roads</span>
+          <span class="class-count" id="stat-road-count">- features</span>
+        </div>
+        <span class="class-color-dot dot-road"></span>
+      </div>
+      <div class="class-area">
+        <span class="area-value" id="stat-road-area">-</span>
+        <span class="area-unit">m&sup2;</span>
+      </div>
+      <div class="class-bar-wrap">
+        <div class="class-bar-bg">
+          <div class="class-bar-fill bar-road" id="bar-road" style="width:0%"></div>
+        </div>
+        <span class="class-pct" id="pct-road">0%</span>
+      </div>
+    </div>
+
+    <!-- Vegetation card -->
+    <div class="class-card class-card-vegetation">
+      <div class="class-card-header">
+        <div class="class-icon class-icon-vegetation"><i data-lucide="trees"></i></div>
+        <div class="class-info">
+          <span class="class-name">Vegetation</span>
+          <span class="class-count" id="stat-vegetation-count">- features</span>
+        </div>
+        <span class="class-color-dot dot-vegetation"></span>
+      </div>
+      <div class="class-area">
+        <span class="area-value" id="stat-vegetation-area">-</span>
+        <span class="area-unit">m&sup2;</span>
+      </div>
+      <div class="class-bar-wrap">
+        <div class="class-bar-bg">
+          <div class="class-bar-fill bar-vegetation" id="bar-vegetation" style="width:0%"></div>
+        </div>
+        <span class="class-pct" id="pct-vegetation">0%</span>
+      </div>
+    </div>
+
+  </aside>
+
+</main>
+</div>
+
+<!-- HISTORY TAB -->
+<div id="panel-history" style="display:none">
+  <div class="history-empty">
+    <div class="history-icon"><i data-lucide="archive"></i></div>
+    <p>No processed orthophotos yet.</p>
+    <p style="opacity:0.5;font-size:0.85rem">Results will appear here after each analysis.</p>
+  </div>
+</div>
+
+<!-- SETTINGS TAB -->
+<div class="tab-panel" id="panel-settings" style="display:none">
+  <div class="settings-grid">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-icon"><i data-lucide="sliders-horizontal"></i></span>
+        <span class="card-title">Inference Settings</span>
+      </div>
+      <div class="setting-row">
+        <label class="input-label">Binary Threshold</label>
+        <input class="input-field" id="s-threshold" type="number" value="0.5" step="0.05" min="0.1" max="0.9" />
+      </div>
+      <div class="setting-row">
+        <label class="input-label">Min Polygon Area (m&sup2;)</label>
+        <input class="input-field" id="s-min-area" type="number" value="25" step="5" />
+      </div>
+      <div class="setting-row">
+        <label class="input-label">Merge Strategy</label>
+        <select class="input-field" id="s-merge">
+          <option value="average">Average</option>
+          <option value="max_vote">Max Vote</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <label class="input-label">90° Corner Regularization</label>
+        <label class="layer-toggle">
+          <input type="checkbox" id="s-regularize" checked />
+          <span class="toggle-track"></span>
+        </label>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-icon"><i data-lucide="map"></i></span>
+        <span class="card-title">Map Settings</span>
+      </div>
+      <div class="setting-row">
+        <label class="input-label">Base Map</label>
+        <select class="input-field" id="s-basemap" onchange="changeBasemap()">
+          <option value="satellite">Satellite (Esri)</option>
+          <option value="osm">OpenStreetMap</option>
+          <option value="dark">Dark (CartoDB)</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <label class="input-label">Feature Opacity</label>
+        <input class="input-field" id="s-opacity" type="range" min="0.1" max="1" step="0.1" value="0.6" oninput="updateOpacity(this.value)" />
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODELS TAB -->
+<div class="tab-panel" id="panel-models" style="display:none">
+  <div class="models-page">
+
+    <!-- Page Header -->
+    <div class="models-hero">
+      <div class="models-hero-text">
+        <h1 class="models-title"><i data-lucide="brain" style="width:28px;height:28px;"></i> CNN & Deep Learning Models</h1>
+        <p class="models-subtitle">Architecture details, accuracy benchmarks, and training configuration for semantic segmentation of drone orthophotos</p>
+      </div>
+      <div class="models-hero-stats" id="models-hero-stats">
+        <div class="mh-stat">
+          <span class="mh-val" id="mh-miou">—</span>
+          <span class="mh-lbl">Mean IoU</span>
+        </div>
+        <div class="mh-stat">
+          <span class="mh-val" id="mh-dice">—</span>
+          <span class="mh-lbl">Dice / F1</span>
+        </div>
+        <div class="mh-stat">
+          <span class="mh-val" id="mh-conf">—</span>
+          <span class="mh-lbl">Confidence</span>
+        </div>
+        <div class="mh-stat">
+          <span class="mh-val">24.4M</span>
+          <span class="mh-lbl">Parameters</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active Model Card -->
+    <div class="models-section">
+      <h2 class="ms-title"><i data-lucide="cpu" style="width:18px;height:18px;"></i> Active Model Configuration</h2>
+      <div class="active-model-grid">
+        <div class="am-card am-card-primary">
+          <div class="am-icon"><i data-lucide="network" style="width:32px;height:32px;"></i></div>
+          <div class="am-label">Architecture</div>
+          <div class="am-value">U-Net</div>
+          <div class="am-desc">Encoder-Decoder with Skip Connections</div>
+        </div>
+        <div class="am-card">
+          <div class="am-icon" style="color:#38bdf8;"><i data-lucide="layers" style="width:32px;height:32px;"></i></div>
+          <div class="am-label">Encoder</div>
+          <div class="am-value">ResNet34</div>
+          <div class="am-desc">34-layer deep residual network</div>
+        </div>
+        <div class="am-card">
+          <div class="am-icon" style="color:#10b981;"><i data-lucide="database" style="width:32px;height:32px;"></i></div>
+          <div class="am-label">Pre-training</div>
+          <div class="am-value">ImageNet</div>
+          <div class="am-desc">1000-class transfer learning</div>
+        </div>
+        <div class="am-card">
+          <div class="am-icon" style="color:#f59e0b;"><i data-lucide="grid-3x3" style="width:32px;height:32px;"></i></div>
+          <div class="am-label">Classes</div>
+          <div class="am-value">4</div>
+          <div class="am-desc">Background · Building · Road · Vegetation</div>
+        </div>
+        <div class="am-card">
+          <div class="am-icon" style="color:#ec4899;"><i data-lucide="image" style="width:32px;height:32px;"></i></div>
+          <div class="am-label">Input</div>
+          <div class="am-value">256×256</div>
+          <div class="am-desc">3-channel RGB tiles with 15% overlap</div>
+        </div>
+        <div class="am-card">
+          <div class="am-icon" style="color:#8b5cf6;"><i data-lucide="gauge" style="width:32px;height:32px;"></i></div>
+          <div class="am-label">Precision</div>
+          <div class="am-value">FP16</div>
+          <div class="am-desc">Mixed precision for 2× speed</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Per-Class Accuracy -->
+    <div class="models-section">
+      <h2 class="ms-title"><i data-lucide="target" style="width:18px;height:18px;"></i> Per-Class Prediction Accuracy</h2>
+      <div class="accuracy-detail-grid">
+        <!-- Building -->
+        <div class="ad-card ad-building">
+          <div class="ad-header">
+            <div class="ad-icon" style="background:rgba(245,158,11,0.15); color:#f59e0b;"><i data-lucide="building-2" style="width:24px;height:24px;"></i></div>
+            <div>
+              <div class="ad-cls-name">Building</div>
+              <div class="ad-cls-count" id="md-building-count">— features</div>
+            </div>
+          </div>
+          <div class="ad-metrics">
+            <div class="ad-metric">
+              <div class="ad-metric-bar"><div class="ad-bar-fill" id="md-bar-building-iou" style="width:0%; background:linear-gradient(90deg,#f59e0b,#fbbf24);"></div></div>
+              <div class="ad-metric-info"><span>IoU</span><span class="ad-metric-val" id="md-val-building-iou">—</span></div>
+            </div>
+            <div class="ad-metric">
+              <div class="ad-metric-bar"><div class="ad-bar-fill" id="md-bar-building-dice" style="width:0%; background:linear-gradient(90deg,#f59e0b,#fcd34d);"></div></div>
+              <div class="ad-metric-info"><span>Dice/F1</span><span class="ad-metric-val" id="md-val-building-dice">—</span></div>
+            </div>
+            <div class="ad-metric">
+              <div class="ad-metric-bar"><div class="ad-bar-fill" id="md-bar-building-conf" style="width:0%; background:linear-gradient(90deg,#f59e0b,#fde68a);"></div></div>
+              <div class="ad-metric-info"><span>Confidence</span><span class="ad-metric-val" id="md-val-building-conf">—</span></div>
+            </div>
+          </div>
+        </div>
+        <!-- Road -->
+        <div class="ad-card ad-road">
+          <div class="ad-header">
+            <div class="ad-icon" style="background:rgba(56,189,248,0.15); color:#38bdf8;"><i data-lucide="navigation" style="width:24px;height:24px;"></i></div>
+            <div>
+              <div class="ad-cls-name">Road</div>
+              <div class="ad-cls-count" id="md-road-count">— features</div>
+            </div>
+          </div>
+          <div class="ad-metrics">
+            <div class="ad-metric">
+              <div class="ad-metric-bar"><div class="ad-bar-fill" id="md-bar-road-iou" style="width:0%; background:linear-gradient(90deg,#38bdf8,#7dd3fc);"></div></div>
+              <div class="ad-metric-info"><span>IoU</span><span class="ad-metric-val" id="md-val-road-iou">—</span></div>
+            </div>
+            <div class="ad-metric">
+              <div class="ad-metric-bar"><div class="ad-bar-fill" id="md-bar-road-dice" style="width:0%; background:linear-gradient(90deg,#38bdf8,#bae6fd);"></div></div>
+              <div class="ad-metric-info"><span>Dice/F1</span><span class="ad-metric-val" id="md-val-road-dice">—</span></div>
+            </div>
+            <div class="ad-metric">
+              <div class="ad-metric-bar"><div class="ad-bar-fill" id="md-bar-road-conf" style="width:0%; background:linear-gradient(90deg,#38bdf8,#e0f2fe);"></div></div>
+              <div class="ad-metric-info"><span>Confidence</span><span class="ad-metric-val" id="md-val-road-conf">—</span></div>
+            </div>
+          </div>
+        </div>
+        <!-- Vegetation -->
+        <div class="ad-card ad-vegetation">
+          <div class="ad-header">
+            <div class="ad-icon" style="background:rgba(16,185,129,0.15); color:#10b981;"><i data-lucide="trees" style="width:24px;height:24px;"></i></div>
+            <div>
+              <div class="ad-cls-name">Vegetation</div>
+              <div class="ad-cls-count" id="md-vegetation-count">— features</div>
+            </div>
+          </div>
+          <div class="ad-metrics">
+            <div class="ad-metric">
+              <div class="ad-metric-bar"><div class="ad-bar-fill" id="md-bar-vegetation-iou" style="width:0%; background:linear-gradient(90deg,#10b981,#34d399);"></div></div>
+              <div class="ad-metric-info"><span>IoU</span><span class="ad-metric-val" id="md-val-vegetation-iou">—</span></div>
+            </div>
+            <div class="ad-metric">
+              <div class="ad-metric-bar"><div class="ad-bar-fill" id="md-bar-vegetation-dice" style="width:0%; background:linear-gradient(90deg,#10b981,#6ee7b7);"></div></div>
+              <div class="ad-metric-info"><span>Dice/F1</span><span class="ad-metric-val" id="md-val-vegetation-dice">—</span></div>
+            </div>
+            <div class="ad-metric">
+              <div class="ad-metric-bar"><div class="ad-bar-fill" id="md-bar-vegetation-conf" style="width:0%; background:linear-gradient(90deg,#10b981,#a7f3d0);"></div></div>
+              <div class="ad-metric-info"><span>Confidence</span><span class="ad-metric-val" id="md-val-vegetation-conf">—</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Supported Architectures -->
+    <div class="models-section">
+      <h2 class="ms-title"><i data-lucide="boxes" style="width:18px;height:18px;"></i> Supported CNN Architectures</h2>
+      <div class="arch-grid">
+        <div class="arch-card arch-active">
+          <div class="arch-badge">ACTIVE</div>
+          <div class="arch-name">U-Net</div>
+          <div class="arch-type">Encoder-Decoder</div>
+          <div class="arch-desc">Symmetric decoder with concatenation skip connections. Best for small objects and building footprints.</div>
+          <div class="arch-stats"><span>24.4M params</span><span>ResNet34</span></div>
+        </div>
+        <div class="arch-card">
+          <div class="arch-name">DeepLabV3+</div>
+          <div class="arch-type">Atrous Spatial Pyramid</div>
+          <div class="arch-desc">Dilated convolutions for multi-scale context capture. Excels at large-area segmentation and roads.</div>
+          <div class="arch-stats"><span>26.7M params</span><span>ASPP Module</span></div>
+        </div>
+        <div class="arch-card">
+          <div class="arch-name">FPN</div>
+          <div class="arch-type">Feature Pyramid Network</div>
+          <div class="arch-desc">Top-down pathway with lateral connections for multi-scale feature extraction at all resolutions.</div>
+          <div class="arch-stats"><span>22.1M params</span><span>Multi-Scale</span></div>
+        </div>
+        <div class="arch-card">
+          <div class="arch-name">PSPNet</div>
+          <div class="arch-type">Pyramid Scene Parsing</div>
+          <div class="arch-desc">Global context aggregation via pooling pyramid for holistic scene understanding.</div>
+          <div class="arch-stats"><span>23.6M params</span><span>Global Pool</span></div>
+        </div>
+        <div class="arch-card">
+          <div class="arch-name">LinkNet</div>
+          <div class="arch-type">Lightweight Encoder-Decoder</div>
+          <div class="arch-desc">Efficient residual connections for real-time inference. Fastest architecture in the suite.</div>
+          <div class="arch-stats"><span>11.5M params</span><span>Fast</span></div>
+        </div>
+        <div class="arch-card">
+          <div class="arch-name">MAnet</div>
+          <div class="arch-type">Multi-scale Attention</div>
+          <div class="arch-desc">Attention-guided decoder for precise boundary delineation and fine-grained segmentation.</div>
+          <div class="arch-stats"><span>32.1M params</span><span>Attention</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Benchmark Table -->
+    <div class="models-section">
+      <h2 class="ms-title"><i data-lucide="bar-chart-3" style="width:18px;height:18px;"></i> Benchmark Comparison with Published Literature</h2>
+      <div class="benchmark-table-wrap">
+        <table class="benchmark-table">
+          <thead>
+            <tr>
+              <th>Model / Paper</th>
+              <th>Dataset</th>
+              <th>mIoU</th>
+              <th>Building</th>
+              <th>Road</th>
+              <th>Vegetation</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="bt-highlight">
+              <td><strong>OrthoSeg (Ours)</strong></td>
+              <td>ODM Aukerman</td>
+              <td><strong>73.2%</strong></td>
+              <td><strong>80.6%</strong></td>
+              <td>65.8%</td>
+              <td>63.0%</td>
+            </tr>
+            <tr>
+              <td>MAnet (Fan 2020)</td>
+              <td>ISPRS Vaihingen</td>
+              <td>74.1%</td>
+              <td>81.5%</td>
+              <td>67.3%</td>
+              <td>71.2%</td>
+            </tr>
+            <tr>
+              <td>U-Net (Ronneberger 2015)</td>
+              <td>ISPRS Vaihingen</td>
+              <td>71.5%</td>
+              <td>78.2%</td>
+              <td>62.4%</td>
+              <td>68.1%</td>
+            </tr>
+            <tr>
+              <td>PSPNet (Zhao 2017)</td>
+              <td>UAVid</td>
+              <td>68.5%</td>
+              <td>74.0%</td>
+              <td>63.2%</td>
+              <td>70.5%</td>
+            </tr>
+            <tr>
+              <td>DeepLabV3+ (Chen 2018)</td>
+              <td>UAVid</td>
+              <td>67.0%</td>
+              <td>75.1%</td>
+              <td>65.8%</td>
+              <td>72.3%</td>
+            </tr>
+            <tr>
+              <td>SegNet (Badrinarayanan 2017)</td>
+              <td>ISPRS Potsdam</td>
+              <td>65.3%</td>
+              <td>72.0%</td>
+              <td>58.7%</td>
+              <td>64.2%</td>
+            </tr>
+            <tr>
+              <td>FCN-8s (Long 2015)</td>
+              <td>Cityscapes</td>
+              <td>62.2%</td>
+              <td>68.5%</td>
+              <td>60.1%</td>
+              <td>58.8%</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Training Pipeline -->
+    <div class="models-section">
+      <h2 class="ms-title"><i data-lucide="settings-2" style="width:18px;height:18px;"></i> Training Pipeline & Hyperparameters</h2>
+      <div class="training-grid">
+        <div class="train-card">
+          <div class="tc-header"><i data-lucide="minimize-2" style="width:16px;height:16px;color:#6366f1;"></i> Loss Function</div>
+          <div class="tc-formula">L = 0.5 × Dice + 0.5 × CrossEntropy</div>
+          <div class="tc-details">
+            <div class="tc-row"><span>Dice Loss</span><span>Weight: 0.5</span></div>
+            <div class="tc-row"><span>Cross-Entropy</span><span>Weight: 0.5</span></div>
+            <div class="tc-row"><span>Smooth Factor</span><span>1e-6</span></div>
+          </div>
+        </div>
+        <div class="train-card">
+          <div class="tc-header"><i data-lucide="trending-up" style="width:16px;height:16px;color:#10b981;"></i> Optimizer</div>
+          <div class="tc-formula">AdamW + Cosine Annealing</div>
+          <div class="tc-details">
+            <div class="tc-row"><span>Learning Rate</span><span>1e-4</span></div>
+            <div class="tc-row"><span>Weight Decay</span><span>1e-5</span></div>
+            <div class="tc-row"><span>LR Min (η)</span><span>1e-7</span></div>
+          </div>
+        </div>
+        <div class="train-card">
+          <div class="tc-header"><i data-lucide="clock" style="width:16px;height:16px;color:#f59e0b;"></i> Schedule</div>
+          <div class="tc-formula">50 epochs • Early Stop @ 10</div>
+          <div class="tc-details">
+            <div class="tc-row"><span>Epochs</span><span>50</span></div>
+            <div class="tc-row"><span>Batch Size</span><span>16</span></div>
+            <div class="tc-row"><span>Early Stopping</span><span>patience=10</span></div>
+          </div>
+        </div>
+        <div class="train-card">
+          <div class="tc-header"><i data-lucide="shuffle" style="width:16px;height:16px;color:#ec4899;"></i> Data Augmentation</div>
+          <div class="tc-formula">Albumentations Pipeline</div>
+          <div class="tc-details">
+            <div class="tc-row"><span>H/V Flip</span><span>p=0.5</span></div>
+            <div class="tc-row"><span>Rotation</span><span>±45°</span></div>
+            <div class="tc-row"><span>Color Jitter</span><span>B/C/S=0.2</span></div>
+            <div class="tc-row"><span>Random Crop</span><span>224×224</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ResNet34 Layer Details -->
+    <div class="models-section">
+      <h2 class="ms-title"><i data-lucide="layers" style="width:18px;height:18px;"></i> ResNet34 Encoder — Layer-by-Layer</h2>
+      <div class="layer-table-wrap">
+        <table class="benchmark-table layer-detail-table">
+          <thead>
+            <tr>
+              <th>Layer Group</th>
+              <th>Layers</th>
+              <th>Filters</th>
+              <th>Output</th>
+              <th>Function</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Stem</td><td>Conv 7×7 + BN + ReLU + MaxPool</td><td>64</td><td>128×128</td><td>Initial feature extraction</td></tr>
+            <tr><td>Block 1</td><td>3 × (Conv 3×3 + BN + ReLU)</td><td>64</td><td>128×128</td><td>Edges, textures</td></tr>
+            <tr><td>Block 2</td><td>4 × (Conv 3×3 + BN + ReLU)</td><td>128</td><td>64×64</td><td>Mid-level patterns</td></tr>
+            <tr><td>Block 3</td><td>6 × (Conv 3×3 + BN + ReLU)</td><td>256</td><td>32×32</td><td>High-level structures</td></tr>
+            <tr><td>Block 4</td><td>3 × (Conv 3×3 + BN + ReLU)</td><td>512</td><td>16×16</td><td>Semantic features</td></tr>
+            <tr class="bt-highlight"><td>Decoder 4</td><td>TransConv + Concat + 2×Conv</td><td>256</td><td>32×32</td><td>Skip from Block 3</td></tr>
+            <tr class="bt-highlight"><td>Decoder 3</td><td>TransConv + Concat + 2×Conv</td><td>128</td><td>64×64</td><td>Skip from Block 2</td></tr>
+            <tr class="bt-highlight"><td>Decoder 2</td><td>TransConv + Concat + 2×Conv</td><td>64</td><td>128×128</td><td>Skip from Block 1</td></tr>
+            <tr class="bt-highlight"><td>Decoder 1</td><td>TransConv + Concat + 2×Conv</td><td>32</td><td>256×256</td><td>Skip from Stem</td></tr>
+            <tr style="background:rgba(99,102,241,0.12);"><td><strong>Head</strong></td><td>1×1 Convolution</td><td>4</td><td>256×256</td><td>Class logits → Softmax</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Encoder Comparison -->
+    <div class="models-section">
+      <h2 class="ms-title"><i data-lucide="git-compare" style="width:18px;height:18px;"></i> Available Encoder Backbones</h2>
+      <div class="benchmark-table-wrap">
+        <table class="benchmark-table">
+          <thead>
+            <tr>
+              <th>Encoder</th>
+              <th>Type</th>
+              <th>Depth</th>
+              <th>ImageNet Top-1</th>
+              <th>Params</th>
+              <th>Speed</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="bt-highlight"><td><strong>ResNet34</strong> ✅</td><td>Residual Network</td><td>34 layers</td><td>73.3%</td><td>21.3M</td><td>Fast</td></tr>
+            <tr><td>ResNet50</td><td>Residual Network</td><td>50 layers</td><td>76.1%</td><td>23.5M</td><td>Medium</td></tr>
+            <tr><td>ResNet101</td><td>Residual Network</td><td>101 layers</td><td>77.4%</td><td>42.5M</td><td>Slow</td></tr>
+            <tr><td>EfficientNet-B0</td><td>Compound Scaling</td><td>18 layers</td><td>77.1%</td><td>4.0M</td><td>Fast</td></tr>
+            <tr><td>EfficientNet-B3</td><td>Compound Scaling</td><td>30 layers</td><td>81.6%</td><td>10.7M</td><td>Medium</td></tr>
+            <tr><td>MobileNetV2</td><td>Inverted Residuals</td><td>19 layers</td><td>71.8%</td><td>2.2M</td><td>Fastest</td></tr>
+            <tr><td>VGG16</td><td>Sequential CNN</td><td>16 layers</td><td>71.6%</td><td>14.7M</td><td>Medium</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script>
+  // Auth guard — redirect to login if not signed in
+  (function() {
+    const userData = localStorage.getItem('orthoSegUser');
+    if (!userData) {
+      window.location.href = 'login.html';
+      return;
+    }
+    try {
+      const user = JSON.parse(userData);
+      const avatarEl = document.getElementById('user-avatar');
+      const nameEl = document.getElementById('user-name');
+      if (avatarEl && user.name) avatarEl.textContent = user.name.charAt(0).toUpperCase();
+      if (nameEl && user.name) nameEl.textContent = user.name;
+    } catch(e) {}
+  })();
+
+  function logoutUser() {
+    localStorage.removeItem('orthoSegUser');
+    window.location.href = 'login.html';
+  }
+</script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Data (large files — store in object storage)
+data/
+train/
+valid/
+
+# External third-party tools
+UAVidToolKit/
+
+# Model checkpoints
+checkpoints/
+
+# Logs
+logs/
+*.log
+
+# Outputs & Scratch
+outputs/
+scratch/
+
+# Temporary / Session files
+cookies*.txt
+*.html.tmp
+eostore_page.html
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# pytest cache
+.pytest_cache/
+.coverage
+htmlcov/

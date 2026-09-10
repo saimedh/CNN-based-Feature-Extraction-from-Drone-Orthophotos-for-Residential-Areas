@@ -1,0 +1,109 @@
+# ============================================================
+# CNN-based Feature Extraction from Drone Orthophotos
+# Master Configuration File
+# ============================================================
+
+# -----------------------------------------------------------
+# Paths
+# -----------------------------------------------------------
+paths:
+  raw_orthophoto_dir: "data/raw"           # GeoTIFF input ortho photos
+  tiles_dir: "data/tiles"                  # image tiles (PNG/TIF)
+  masks_dir: "data/masks"                  # corresponding mask tiles
+  processed_dir: "data/processed"          # cleaned / augmented data
+  checkpoints_dir: "checkpoints"           # model checkpoint storage
+  output_dir: "outputs"                    # GeoJSON / Shapefile results
+  logs_dir: "logs"                         # training & inference logs
+
+# -----------------------------------------------------------
+# Tiling
+# -----------------------------------------------------------
+tiling:
+  tile_size: 256          # pixels (width == height)
+  overlap: 0.15           # fractional overlap between adjacent tiles
+  min_valid_ratio: 0.3    # minimum fraction of non-nodata pixels per tile
+
+# -----------------------------------------------------------
+# Dataset / Classes
+# -----------------------------------------------------------
+dataset:
+  classes:
+    - background    # 0
+    - building      # 1
+    - road          # 2
+    - vegetation    # 3
+  num_classes: 4
+  val_split: 0.15
+  test_split: 0.10
+  random_seed: 42
+
+# -----------------------------------------------------------
+# Augmentation (albumentations)
+# -----------------------------------------------------------
+augmentation:
+  horizontal_flip: true
+  vertical_flip: true
+  rotate_limit: 45
+  color_jitter:
+    brightness: 0.2
+    contrast: 0.2
+    saturation: 0.2
+    hue: 0.05
+  random_crop_size: 224   # crop inside tile before feeding to model
+
+# -----------------------------------------------------------
+# Model
+# -----------------------------------------------------------
+model:
+  architecture: "unet"           # unet | deeplabv3plus
+  encoder: "resnet34"            # resnet34 | efficientnet-b0
+  encoder_weights: "imagenet"    # pretrained weights
+  in_channels: 3                 # RGB
+  num_classes: 4
+
+# -----------------------------------------------------------
+# Training
+# -----------------------------------------------------------
+training:
+  epochs: 50
+  batch_size: 16
+  num_workers: 4
+  learning_rate: 1.0e-4
+  weight_decay: 1.0e-5
+  scheduler: "cosine"            # cosine | step | plateau
+  mixed_precision: true          # fp16 training
+  early_stopping_patience: 10
+  save_top_k: 3                  # keep top-k checkpoints by val IoU
+
+  loss:
+    dice_weight: 0.5
+    bce_weight: 0.5
+
+# -----------------------------------------------------------
+# Postprocessing
+# -----------------------------------------------------------
+postprocessing:
+  binary_threshold: 0.5          # mask binarisation threshold
+  morph_kernel_size: 3           # structuring element for open/close ops
+  morph_iterations: 2
+  min_polygon_area: 25           # sq metres — smaller polys discarded
+  douglas_peucker_tolerance: 1.0 # simplification tolerance (metres)
+  merge_overlap_strategy: "average"   # average | max_vote
+
+# -----------------------------------------------------------
+# Evaluation
+# -----------------------------------------------------------
+evaluation:
+  metrics:
+    - iou
+    - dice
+    - f1
+  smooth: 1.0e-6
+
+# -----------------------------------------------------------
+# API (FastAPI)
+# -----------------------------------------------------------
+api:
+  host: "0.0.0.0"
+  port: 8000
+  max_file_size_mb: 500

@@ -1,0 +1,169 @@
+/* ============================================================
+   OrthoSeg — demo.css
+   Demo Mode — Banner, disabled overlays, layout adjustments
+   ============================================================ */
+
+/* ── Demo Banner ── */
+.demo-banner {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 1100;
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.12), rgba(99, 102, 241, 0.08));
+  border-bottom: 1px solid rgba(245, 158, 11, 0.25);
+  backdrop-filter: blur(12px);
+}
+.demo-banner-inner {
+  max-width: 100%;
+  padding: 8px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.demo-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+.demo-banner-icon {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+.demo-banner-text {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.demo-banner-text strong {
+  color: #f59e0b;
+  font-weight: 700;
+}
+.demo-banner-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.demo-banner-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 14px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+.demo-banner-btn [data-lucide] {
+  width: 13px;
+  height: 13px;
+}
+.demo-banner-btn-primary {
+  background: linear-gradient(135deg, #38bdf8, #6366f1);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(56, 189, 248, 0.25);
+}
+.demo-banner-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(56, 189, 248, 0.35);
+}
+.demo-banner-btn-ghost {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+.demo-banner-btn-ghost:hover {
+  background: rgba(255,255,255,0.08);
+  color: var(--text-primary);
+}
+
+/* ── Navbar offset for demo banner ── */
+.demo-navbar {
+  top: 37px !important;
+}
+
+/* ── App layout offset — push below banner + navbar ── */
+.demo-app-layout {
+  margin-top: calc(var(--nav-h) + 37px) !important;
+  height: calc(100vh - var(--nav-h) - 37px) !important;
+}
+
+/* ── History/Settings/Models panel offset ── */
+#panel-history,
+#panel-settings,
+#panel-models {
+  margin-top: calc(var(--nav-h) + 37px);
+  height: calc(100vh - var(--nav-h) - 37px);
+}
+
+/* ── Disabled Card Overlay ── */
+.demo-disabled-card {
+  position: relative;
+  overflow: hidden;
+}
+.demo-disabled-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 12, 20, 0.88);
+  backdrop-filter: blur(6px);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: var(--radius-md);
+  padding: 16px;
+  text-align: center;
+}
+.demo-disabled-overlay [data-lucide] {
+  width: 28px;
+  height: 28px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.demo-disabled-overlay span {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+.demo-unlock-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 18px;
+  background: linear-gradient(135deg, #38bdf8, #6366f1);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  border-radius: 6px;
+  text-decoration: none;
+  margin-top: 4px;
+  transition: all 0.25s;
+  box-shadow: 0 2px 10px rgba(56, 189, 248, 0.25);
+}
+.demo-unlock-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(56, 189, 248, 0.35);
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .demo-banner-text {
+    white-space: normal;
+    font-size: 0.72rem;
+  }
+  .demo-banner-inner {
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 16px;
+  }
+  .demo-banner-actions {
+    width: 100%;
+    justify-content: center;
+  }
+}
