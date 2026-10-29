@@ -35,14 +35,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import numpy as np
 import rasterio
 import torch
-from torch.cuda.amp import autocast
+from torch.amp import autocast
 
 from models import SegmentationModel
 from postprocessing.vectorize import merge_tile_predictions, vectorize_predictions
 from preprocessing.tiling import tile_orthophoto, _stride
 from preprocessing.dataset import build_val_transforms, _rescale_to_uint8
+from preprocessing.image_enhancement import enhance_orthophoto_image
 from utils.config import load_config, _Config
 from utils.logger import get_logger
+from utils.metrics import numpy_segmentation_metrics, softmax_confidence_by_class
 
 logger = get_logger(__name__)
 
@@ -54,10 +56,10 @@ _STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 # Tile-level inference
 # ---------------------------------------------------------------------------
 
-def _preprocess_tile(img_path: str, tile_size: int) -> np.ndarray:
+def _preprocess_tile(img_path: str, tile_size: int, cfg: Optional[_Config] = None) -> np.ndarray:
     """
-    Load a tile GeoTIFF, normalise to [0,1], apply ImageNet normalisation,
-    and return a float32 numpy array [3, H, W].
+    Load a tile GeoTIFF, apply radiometric enhancement (CLAHE, bilateral filter, shadow recovery),
+    normalise to [0,1], apply ImageNet normalisation, and return a float32 numpy array [3, H, W].
     """
     with rasterio.open(img_path) as src:
         img = src.read()  # (C, H, W)
@@ -65,7 +67,18 @@ def _preprocess_tile(img_path: str, tile_size: int) -> np.ndarray:
     if img.dtype != np.uint8:
         img = _rescale_to_uint8(img)
 
-    img = img[:3].astype(np.float32) / 255.0   # [3, H, W]
+    if img.shape[0] == 1:
+        img = np.repeat(img, 3, axis=0)
+    elif img.shape[0] > 3:
+        img = img[:3]
+
+    # Apply radiometric & image enhancement (CLAHE, bilateral filter, shadow reduction)
+    if cfg is None or getattr(getattr(cfg, "image_processing", None), "enabled", True):
+        img_rgb = np.transpose(img, (1, 2, 0))
+        img_rgb = enhance_orthophoto_image(img_rgb, cfg=cfg)
+        img = np.transpose(img_rgb, (2, 0, 1))
+
+    img = img.astype(np.float32) / 255.0   # [3, H, W]
     img = (img - _MEAN[:, None, None]) / _STD[:, None, None]
     return img
 
@@ -77,6 +90,7 @@ def _batch_inference(
     batch_size: int,
     tile_size: int,
     mixed_precision: bool,
+    cfg: Optional[_Config] = None,
 ) -> list[np.ndarray]:
     """
     Run batched inference on a list of tile paths.
@@ -91,11 +105,11 @@ def _batch_inference(
     for i in range(0, len(tile_paths), batch_size):
         batch_paths = tile_paths[i:i + batch_size]
         imgs = np.stack(
-            [_preprocess_tile(p, tile_size) for p in batch_paths], axis=0
+            [_preprocess_tile(p, tile_size, cfg=cfg) for p in batch_paths], axis=0
         )  # [B, 3, H, W]
         tensor = torch.from_numpy(imgs).to(device, non_blocking=True)
 
-        with torch.no_grad(), autocast(enabled=mixed_precision):
+        with torch.no_grad(), autocast(device_type=str(device).split(':')[0], enabled=mixed_precision):
             logits = model(tensor)
             probs = torch.softmax(logits.float(), dim=1)
 
@@ -108,6 +122,116 @@ def _batch_inference(
 # Main predict function
 # ---------------------------------------------------------------------------
 
+def _find_paired_mask(orthophoto_path: Path) -> Optional[Path]:
+    """Return sibling ``<stem>_mask.<ext>`` if it exists."""
+    parent = orthophoto_path.parent
+    stem = orthophoto_path.stem
+    for ext in (".tif", ".tiff", ".png", ".jpg", ".jpeg", ".TIF", ".TIFF", ".PNG"):
+        candidate = parent / f"{stem}_mask{ext}"
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _load_mask_map(mask_path: Path, height: int, width: int) -> np.ndarray:
+    """Load a single-band integer mask and resize to the orthophoto grid."""
+    from scipy.ndimage import zoom
+
+    with rasterio.open(mask_path) as src:
+        mask = src.read(1)
+    if mask.shape != (height, width):
+        zy = height / mask.shape[0]
+        zx = width / mask.shape[1]
+        mask = zoom(mask, (zy, zx), order=0)
+    return mask.astype(np.int64)
+
+
+def _write_run_metrics(
+    output_dir: Path,
+    full_probs: np.ndarray,
+    geojson_paths: dict[str, Path],
+    cfg: _Config,
+    source_file: str,
+    checkpoint_path: str | Path,
+    mask_path: Optional[Path],
+    elapsed: float,
+) -> dict:
+    """Write ``metrics.json`` and ``summary.json`` for a completed run."""
+    import json
+
+    class_names = list(cfg.dataset.classes)
+    conf_by_class = softmax_confidence_by_class(full_probs, class_names)
+    pred = np.argmax(full_probs, axis=0)
+
+    has_gt = mask_path is not None and Path(mask_path).exists()
+    gt_metrics = None
+    if has_gt:
+        target = _load_mask_map(Path(mask_path), pred.shape[0], pred.shape[1])
+        gt_metrics = numpy_segmentation_metrics(
+            pred, target, int(cfg.model.num_classes), class_names=class_names
+        )
+
+    per_class = {}
+    feature_classes = [c for c in class_names if c != "background"]
+    total_features = 0
+    for cls in feature_classes:
+        gj_path = geojson_paths.get(cls)
+        n = 0
+        if gj_path and Path(gj_path).exists():
+            with open(gj_path, "r", encoding="utf-8") as f:
+                n = len(json.load(f).get("features", []))
+        total_features += n
+        conf = conf_by_class.get(cls, {})
+        entry = {
+            "confidence": conf.get("confidence", 0.0),
+            "pixel_count": conf.get("pixel_count", 0),
+            "feature_count": n,
+            "iou": None,
+            "dice": None,
+            "f1": None,
+        }
+        if gt_metrics and cls in gt_metrics["per_class"]:
+            entry.update(gt_metrics["per_class"][cls])
+        per_class[cls] = entry
+
+    active_conf = [v["confidence"] for v in per_class.values() if v["feature_count"] > 0 or v["pixel_count"] > 0]
+    payload = {
+        "run_id": Path(output_dir).name,
+        "source_file": source_file,
+        "checkpoint": str(checkpoint_path),
+        "has_ground_truth": has_gt,
+        "metrics_source": "ground_truth" if has_gt else "softmax_confidence",
+        "per_class": per_class,
+        "mean_iou": gt_metrics["mean_iou"] if gt_metrics else None,
+        "mean_dice": gt_metrics["mean_dice"] if gt_metrics else None,
+        "mean_f1": gt_metrics["mean_f1"] if gt_metrics else None,
+        "mean_confidence": round(float(np.mean(active_conf)), 4) if active_conf else 0.0,
+        "total_features": total_features,
+        "model_architecture": cfg.model.architecture,
+        "encoder": cfg.model.encoder,
+        "elapsed_seconds": round(elapsed, 2),
+    }
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    with open(output_dir / "metrics.json", "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+    with open(output_dir / "summary.json", "w", encoding="utf-8") as f:
+        json.dump(
+            {
+                "source_file": source_file,
+                "classes": list(geojson_paths.keys()),
+                "files": [Path(p).name for p in geojson_paths.values()],
+                "has_ground_truth": has_gt,
+                "total_features": total_features,
+                "mean_iou": payload["mean_iou"],
+                "mean_confidence": payload["mean_confidence"],
+            },
+            f,
+            indent=2,
+        )
+    return payload
+
+
 def predict(
     orthophoto_path: str | Path,
     checkpoint_path: str | Path,
@@ -115,6 +239,7 @@ def predict(
     cfg_path: Optional[str | Path] = None,
     save_prob_tif: bool = False,
     regularize_buildings: bool = True,
+    mask_path: Optional[str | Path] = None,
 ) -> dict[str, Path]:
     """
     Full inference pipeline for a single orthophoto.
@@ -137,14 +262,19 @@ def predict(
     logger.info(f"Running inference on: {orthophoto_path}  (device={device})")
 
     # ---- Model ----
-    model = SegmentationModel(cfg).to(device)
-    if checkpoint_path and Path(checkpoint_path).exists():
-        model.load_checkpoint(str(checkpoint_path), device=device)
-    else:
-        logger.warning(
-            f"Checkpoint '{checkpoint_path}' not found. "
-            "Model will run with initialized weights."
+    ckpt = Path(checkpoint_path) if checkpoint_path else Path()
+    if not ckpt.exists():
+        raise FileNotFoundError(
+            f"Trained checkpoint not found: '{checkpoint_path}'. "
+            "Train a model first (python training/train.py) or place best.pt in checkpoints/."
         )
+    model = SegmentationModel(cfg).to(device)
+    model.load_checkpoint(str(ckpt), device=device)
+
+    ortho_path = Path(orthophoto_path)
+    resolved_mask = Path(mask_path) if mask_path else _find_paired_mask(ortho_path)
+    if resolved_mask and not resolved_mask.exists():
+        resolved_mask = None
 
     # ---- Tile into a temp directory ----
     with tempfile.TemporaryDirectory(prefix="ortho_tiles_") as tmp_dir:
@@ -171,6 +301,7 @@ def predict(
             batch_size=int(cfg.training.batch_size),
             tile_size=int(cfg.tiling.tile_size),
             mixed_precision=bool(cfg.training.mixed_precision),
+            cfg=cfg,
         )
 
         # ---- Reconstruct full ortho from tiles ----
@@ -243,7 +374,18 @@ def predict(
             regularize_buildings=regularize_buildings,
         )
 
-    elapsed = time.time() - t_start
+        elapsed = time.time() - t_start
+        _write_run_metrics(
+            output_dir=Path(output_dir),
+            full_probs=full_probs,
+            geojson_paths=output_paths,
+            cfg=cfg,
+            source_file=ortho_path.name,
+            checkpoint_path=ckpt,
+            mask_path=resolved_mask,
+            elapsed=elapsed,
+        )
+
     logger.info(f"Prediction complete in {elapsed:.1f}s  →  {output_dir}")
     return output_paths
 
@@ -331,6 +473,13 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     input_p = Path(args.orthophoto)
+    if not input_p.exists():
+        raw_candidates = list(Path("data/raw").glob("*.tif"))
+        valid_candidates = [c.name for c in raw_candidates if not c.name.endswith("_mask.tif")]
+        hint = f" Available orthophotos in data/raw/: {valid_candidates}" if valid_candidates else ""
+        logger.error(f"Input orthophoto path not found: '{args.orthophoto}'.{hint}")
+        sys.exit(1)
+
     if input_p.is_dir():
         predict_folder(
             folder_path=input_p,

@@ -1,0 +1,317 @@
+{
+  "tile_stats": {
+    "count": 29,
+    "width_range": [
+      256,
+      256
+    ],
+    "height_range": [
+      256,
+      256
+    ],
+    "avg_file_size_kb": 107.8,
+    "total_size_mb": 3.05,
+    "total_pixels": 589824,
+    "masks_found": 9
+  },
+  "class_names": [
+    "background",
+    "building",
+    "road",
+    "vegetation"
+  ],
+  "class_distribution": {
+    "background": {
+      "pixel_count": 393831,
+      "percentage": 66.77
+    },
+    "building": {
+      "pixel_count": 110539,
+      "percentage": 18.74
+    },
+    "road": {
+      "pixel_count": 71424,
+      "percentage": 12.11
+    },
+    "vegetation": {
+      "pixel_count": 14030,
+      "percentage": 2.38
+    }
+  },
+  "class_weights": [
+    0.1049,
+    0.3736,
+    0.5782,
+    2.9434
+  ],
+  "imbalance_ratio": 28.07,
+  "split_summary": {
+    "total": 29,
+    "train": 23,
+    "val": 4,
+    "test": 2
+  },
+  "file_details": [
+    {
+      "name": "demo_residential_ortho_r0000_c0000.tif",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 11004,
+      "has_mask": true
+    },
+    {
+      "name": "demo_residential_ortho_r0000_c0001.tif",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 11113,
+      "has_mask": true
+    },
+    {
+      "name": "demo_residential_ortho_r0000_c0002.tif",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 8373,
+      "has_mask": true
+    },
+    {
+      "name": "demo_residential_ortho_r0001_c0000.tif",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 10799,
+      "has_mask": true
+    },
+    {
+      "name": "demo_residential_ortho_r0001_c0001.tif",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 11092,
+      "has_mask": true
+    },
+    {
+      "name": "demo_residential_ortho_r0001_c0002.tif",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 8880,
+      "has_mask": true
+    },
+    {
+      "name": "demo_residential_ortho_r0002_c0000.tif",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 9146,
+      "has_mask": true
+    },
+    {
+      "name": "demo_residential_ortho_r0002_c0001.tif",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 9939,
+      "has_mask": true
+    },
+    {
+      "name": "demo_residential_ortho_r0002_c0002.tif",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 7882,
+      "has_mask": true
+    },
+    {
+      "name": "odm_aukerman_orthophoto_r0000_c0000.tif",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 78667,
+      "has_mask": false
+    },
+    {
+      "name": "odm_aukerman_orthophoto_r0000_c0001.tif",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 210396,
+      "has_mask": false
+    },
+    {
+      "name": "odm_aukerman_orthophoto_r0000_c0002.tif",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 205142,
+      "has_mask": false
+    },
+    {
+      "name": "odm_aukerman_orthophoto_r0000_c0003.tif",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 90243,
+      "has_mask": false
+    },
+    {
+      "name": "odm_aukerman_orthophoto_r0000_c0004.tif",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 4259,
+      "has_mask": false
+    },
+    {
+      "name": "odm_aukerman_orthophoto_r0001_c0000.tif",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 150851,
+      "has_mask": false
+    },
+    {
+      "name": "odm_aukerman_orthophoto_r0001_c0001.tif",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 218885,
+      "has_mask": false
+    },
+    {
+      "name": "odm_aukerman_orthophoto_r0001_c0002.tif",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 218959,
+      "has_mask": false
+    },
+    {
+      "name": "odm_aukerman_orthophoto_r0001_c0003.tif",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 228289,
+      "has_mask": false
+    },
+    {
+      "name": "odm_aukerman_orthophoto_r0001_c0004.tif",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 106930,
+      "has_mask": false
+    },
+    {
+      "name": "odm_aukerman_orthophoto_r0002_c0000.tif",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 176530,
+      "has_mask": false
+    },
+    {
+      "name": "odm_aukerman_orthophoto_r0002_c0001.tif",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 223000,
+      "has_mask": false
+    },
+    {
+      "name": "odm_aukerman_orthophoto_r0002_c0002.tif",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 227072,
+      "has_mask": false
+    },
+    {
+      "name": "odm_aukerman_orthophoto_r0002_c0003.tif",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 235769,
+      "has_mask": false
+    },
+    {
+      "name": "odm_aukerman_orthophoto_r0002_c0004.tif",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 130567,
+      "has_mask": false
+    },
+    {
+      "name": "odm_aukerman_orthophoto_r0003_c0000.tif",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 89295,
+      "has_mask": false
+    },
+    {
+      "name": "odm_aukerman_orthophoto_r0003_c0001.tif",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 163328,
+      "has_mask": false
+    },
+    {
+      "name": "odm_aukerman_orthophoto_r0003_c0002.tif",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 193959,
+      "has_mask": false
+    },
+    {
+      "name": "odm_aukerman_orthophoto_r0003_c0003.tif",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 134324,
+      "has_mask": false
+    },
+    {
+      "name": "odm_aukerman_orthophoto_r0003_c0004.tif",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 25803,
+      "has_mask": false
+    }
+  ]
+}

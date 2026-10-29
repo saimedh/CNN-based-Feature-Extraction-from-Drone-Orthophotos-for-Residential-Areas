@@ -1,0 +1,65 @@
+{
+  "run_id": "odm_aukerman",
+  "total_features": 18,
+  "total_mapped_area_m2": 783.53,
+  "total_mapped_area_hectares": 0.0784,
+  "per_class": {
+    "building": {
+      "count": 4,
+      "total_area_m2": 94.39,
+      "mean_area_m2": 23.6,
+      "median_area_m2": 20.62,
+      "std_area_m2": 9.75,
+      "min_area_m2": 13.7,
+      "max_area_m2": 39.44,
+      "mean_perimeter_m": 0.0,
+      "total_perimeter_m": 0.0,
+      "mean_compactness": 0,
+      "regularity": "N/A",
+      "total_solar_kwp": 14.16,
+      "mean_solar_kwp": 3.54
+    },
+    "road": {
+      "count": 14,
+      "total_area_m2": 689.14,
+      "mean_area_m2": 49.22,
+      "median_area_m2": 42.11,
+      "std_area_m2": 41.36,
+      "min_area_m2": 10.2,
+      "max_area_m2": 181.0,
+      "mean_perimeter_m": 0.0,
+      "total_perimeter_m": 0.01,
+      "total_road_length_m": 0,
+      "mean_segment_length_m": 0,
+      "avg_width_m": 0
+    },
+    "vegetation": {
+      "count": 0,
+      "total_area_m2": 0,
+      "mean_area_m2": 0,
+      "median_area_m2": 0,
+      "std_area_m2": 0,
+      "min_area_m2": 0,
+      "max_area_m2": 0,
+      "fragmentation_index": 0,
+      "canopy_area_m2": 0,
+      "patch_density": 0
+    }
+  },
+  "land_use": {
+    "building": {
+      "area_m2": 94.39,
+      "percentage": 12.05
+    },
+    "road": {
+      "area_m2": 689.14,
+      "percentage": 87.95
+    },
+    "vegetation": {
+      "area_m2": 0,
+      "percentage": 0.0
+    }
+  },
+  "confidence": {},
+  "features_per_hectare": 229.73
+}

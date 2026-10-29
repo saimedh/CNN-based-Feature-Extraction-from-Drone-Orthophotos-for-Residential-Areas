@@ -30,9 +30,14 @@ checkpoints/
 logs/
 *.log
 
-# Outputs (archives ignored)
+# Outputs (archives ignored and transient run directories)
 outputs/*.zip
 outputs/**/*.zip
+outputs/run_*/
+outputs/test_*/
+outputs/aukerman_*/
+outputs/image_part_*/
+outputs/6ad0977ffa5574160039dbe6/
 
 # Scratch
 scratch/

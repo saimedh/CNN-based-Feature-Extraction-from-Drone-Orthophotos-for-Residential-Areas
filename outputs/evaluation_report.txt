@@ -1,0 +1,14 @@
+CNN-based Feature Extraction — Evaluation Report
+============================================================
+Split:      test
+Checkpoint: checkpoints/best.pt
+Elapsed:    3.2s
+
+Class                     IoU      Dice        F1
+------------------------------------------------------------
+background             0.6662    0.7997    0.7997
+building               0.5480    0.7080    0.7080
+road                   0.3508    0.5194    0.5194
+vegetation             0.8052    0.8921    0.8921
+------------------------------------------------------------
+Mean                   0.5926    0.7298    0.7298

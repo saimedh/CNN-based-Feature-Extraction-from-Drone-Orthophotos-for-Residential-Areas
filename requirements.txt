@@ -22,9 +22,10 @@ rasterio>=1.3.9      # bundles GDAL internally on Windows — no separate GDAL i
 pyproj>=3.6.1
 Shapely>=2.0.2
 
-# ----- Scientific -----
+# ----- Scientific & Computer Vision -----
 numpy>=1.24.0
 scipy>=1.11.0
+opencv-python-headless>=4.8.0
 
 # ----- Config / Logging -----
 PyYAML>=6.0

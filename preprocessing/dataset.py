@@ -15,8 +15,12 @@ Class index mapping (default, configurable via YAML):
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from typing import Optional, Callable
+
+# Ensure project root is in sys.path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import numpy as np
 import rasterio
@@ -25,6 +29,7 @@ from torch.utils.data import Dataset, DataLoader, random_split
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
+from preprocessing.image_enhancement import enhance_orthophoto_image
 from utils.config import load_config, _Config
 from utils.logger import get_logger
 
@@ -96,33 +101,44 @@ class OrthophotoDataset(Dataset):
         mask_dir: str | Path,
         transform: Optional[Callable] = None,
         tile_ext: str = ".tif",
+        cfg: Optional[_Config] = None,
+        enable_enhancement: bool = True,
     ) -> None:
         self.img_dir = Path(img_dir)
         self.mask_dir = Path(mask_dir)
         self.transform = transform
+        self.cfg = cfg or load_config()
+        self.enable_enhancement = enable_enhancement
 
         # Collect all image tile paths (sorted for reproducibility)
-        self.img_paths = sorted(self.img_dir.glob(f"*{tile_ext}"))
+        self.img_paths = sorted(
+            list(self.img_dir.glob(f"*{tile_ext}")) +
+            (list(self.img_dir.glob("*.png")) if tile_ext != ".png" else [])
+        )
         if not self.img_paths:
             raise FileNotFoundError(
-                f"No '{tile_ext}' files found in '{img_dir}'. "
-                "Run preprocessing/tiling.py first."
+                f"No tile files found in '{img_dir}'. "
+                "Run preprocessing/tiling.py or potsdam_adapter.py first."
             )
 
         # Build paired mask paths and validate
         self.mask_paths: list[Optional[Path]] = []
         for ip in self.img_paths:
-            candidate = self.mask_dir / (ip.stem + "_mask" + tile_ext)
-            if candidate.exists():
-                self.mask_paths.append(candidate)
+            # Try: same name in mask dir (Potsdam/UAVid style)
+            candidate_same = self.mask_dir / ip.name
+            # Try: stem + _mask + ext (GeoTIFF style)
+            candidate_mask = self.mask_dir / (ip.stem + "_mask" + ip.suffix)
+            if candidate_same.exists():
+                self.mask_paths.append(candidate_same)
+            elif candidate_mask.exists():
+                self.mask_paths.append(candidate_mask)
             else:
-                # Fallback: mask file with same stem (no suffix)
-                candidate2 = self.mask_dir / (ip.name)
-                self.mask_paths.append(candidate2 if candidate2.exists() else None)
+                self.mask_paths.append(None)
 
         logger.info(
             f"OrthophotoDataset: {len(self.img_paths)} tiles | "
-            f"masks found: {sum(1 for m in self.mask_paths if m)}"
+            f"masks found: {sum(1 for m in self.mask_paths if m)} | "
+            f"enhancement: {'enabled' if self.enable_enhancement else 'disabled'}"
         )
 
     def __len__(self) -> int:
@@ -140,20 +156,31 @@ class OrthophotoDataset(Dataset):
         img_path = self.img_paths[idx]
         mask_path = self.mask_paths[idx]
 
-        # --- Load image (bands × H × W → H × W × 3 for albumentations) ---
-        with rasterio.open(img_path) as src:
-            img = src.read()  # (C, H, W), uint8 or uint16
+        # --- Load image (support both GeoTIFF and PNG) ---
+        if img_path.suffix.lower() in ('.tif', '.tiff'):
+            with rasterio.open(img_path) as src:
+                img = src.read()  # (C, H, W), uint8 or uint16
+            if img.dtype != np.uint8:
+                img = _rescale_to_uint8(img)
+            img = np.transpose(img[:3], (1, 2, 0))  # (H, W, 3)
+        else:
+            from PIL import Image as PILImage
+            img = np.array(PILImage.open(img_path).convert("RGB"))  # (H, W, 3)
 
-        # Normalise to [0, 255] uint8 for albumentations compatibility
-        if img.dtype != np.uint8:
-            img = _rescale_to_uint8(img)
-
-        img = np.transpose(img[:3], (1, 2, 0))  # Keep only first 3 bands → (H, W, 3)
+        # Apply radiometric & image enhancement (CLAHE, bilateral filter, shadow reduction)
+        if self.enable_enhancement:
+            img = enhance_orthophoto_image(img, cfg=self.cfg)
 
         # --- Load mask ---
         if mask_path and mask_path.exists():
-            with rasterio.open(mask_path) as msrc:
-                mask = msrc.read(1).astype(np.int64)  # (H, W)
+            if mask_path.suffix.lower() in ('.tif', '.tiff'):
+                with rasterio.open(mask_path) as msrc:
+                    mask = msrc.read(1).astype(np.int64)  # (H, W)
+            else:
+                from PIL import Image as PILImage
+                mask = np.array(PILImage.open(mask_path)).astype(np.int64)
+                if mask.ndim == 3:
+                    mask = mask[:, :, 0]  # take first channel
         else:
             # Dummy all-background mask when no label exists
             mask = np.zeros((img.shape[0], img.shape[1]), dtype=np.int64)
@@ -162,7 +189,11 @@ class OrthophotoDataset(Dataset):
         if self.transform is not None:
             augmented = self.transform(image=img, mask=mask)
             image_tensor = augmented["image"]         # FloatTensor [3, H, W]
-            mask_tensor = torch.from_numpy(augmented["mask"]).long()
+            mask_arr = augmented["mask"]
+            if isinstance(mask_arr, torch.Tensor):
+                mask_tensor = mask_arr.long()
+            else:
+                mask_tensor = torch.from_numpy(mask_arr).long()
         else:
             image_tensor = torch.from_numpy(np.transpose(img, (2, 0, 1))).float() / 255.0
             mask_tensor = torch.from_numpy(mask).long()
@@ -197,8 +228,8 @@ def _rescale_to_uint8(arr: np.ndarray) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 def build_dataloaders(
-    img_dir: str | Path,
-    mask_dir: str | Path,
+    img_dir: Optional[str | Path] = None,
+    mask_dir: Optional[str | Path] = None,
     cfg: Optional[_Config] = None,
 ) -> tuple[DataLoader, DataLoader, DataLoader]:
     """
@@ -211,10 +242,16 @@ def build_dataloaders(
     if cfg is None:
         cfg = load_config()
 
+    if img_dir is None:
+        img_dir = cfg.paths.tiles_dir
+    if mask_dir is None:
+        mask_dir = cfg.paths.masks_dir
+
     full_dataset = OrthophotoDataset(
         img_dir=img_dir,
         mask_dir=mask_dir,
         transform=None,  # transforms applied after splitting
+        cfg=cfg,
     )
 
     n_total = len(full_dataset)
@@ -233,8 +270,8 @@ def build_dataloaders(
 
     train_ds.dataset.transform = train_tfm  # type: ignore[union-attr]
     # Subsets share the dataset reference — use separate wrappers for val/test
-    val_ds = _TransformSubset(val_ds, val_tfm)
-    test_ds = _TransformSubset(test_ds, val_tfm)
+    val_ds = _TransformSubset(val_ds, val_tfm, cfg=cfg)
+    test_ds = _TransformSubset(test_ds, val_tfm, cfg=cfg)
 
     batch_size = int(cfg.training.batch_size)
     num_workers = int(cfg.training.num_workers)
@@ -261,25 +298,35 @@ def build_dataloaders(
 class _TransformSubset(Dataset):
     """Wraps a random_split Subset to apply a *different* transform."""
 
-    def __init__(self, subset: torch.utils.data.Subset, transform: Callable) -> None:
+    def __init__(
+        self,
+        subset: torch.utils.data.Subset,
+        transform: Callable,
+        cfg: Optional[_Config] = None,
+        enable_enhancement: bool = True,
+    ) -> None:
         self.subset = subset
         self.transform = transform
+        self.cfg = cfg or load_config()
+        self.enable_enhancement = enable_enhancement
 
     def __len__(self) -> int:
         return len(self.subset)
 
     def __getitem__(self, idx: int) -> dict:
-        sample = self.subset.dataset[self.subset.indices[idx]]
-        # Re-apply transform over the raw arrays
-        # (OrthophotoDataset already returns tensors; we need raw here)
-        img_path = sample["img_path"]
+        real_idx = self.subset.indices[idx]
+        img_path = self.subset.dataset.img_paths[real_idx]
         with rasterio.open(img_path) as src:
             img = src.read()
         if img.dtype != np.uint8:
             img = _rescale_to_uint8(img)
         img = np.transpose(img[:3], (1, 2, 0))
 
-        mask_path_raw = self.subset.dataset.mask_paths[self.subset.indices[idx]]
+        # Apply radiometric & image enhancement (CLAHE, bilateral filter, shadow reduction)
+        if self.enable_enhancement:
+            img = enhance_orthophoto_image(img, cfg=self.cfg)
+
+        mask_path_raw = self.subset.dataset.mask_paths[real_idx]
         if mask_path_raw and Path(mask_path_raw).exists():
             with rasterio.open(mask_path_raw) as msrc:
                 mask = msrc.read(1).astype(np.int64)
@@ -287,8 +334,38 @@ class _TransformSubset(Dataset):
             mask = np.zeros((img.shape[0], img.shape[1]), dtype=np.int64)
 
         augmented = self.transform(image=img, mask=mask)
+        mask_arr = augmented["mask"]
+        if isinstance(mask_arr, torch.Tensor):
+            mask_tensor = mask_arr.long()
+        else:
+            mask_tensor = torch.from_numpy(mask_arr).long()
+
         return {
             "image": augmented["image"],
-            "mask": torch.from_numpy(augmented["mask"]).long(),
-            "img_path": img_path,
+            "mask": mask_tensor,
+            "img_path": str(img_path),
         }
+
+
+if __name__ == "__main__":
+    print("Testing OrthoDataset and DataLoader creation...")
+    cfg = load_config()
+    print(f"Loaded config: classes={cfg.dataset.classes}")
+    try:
+        train_loader, val_loader, test_loader = build_dataloaders(cfg=cfg)
+        print(f"Successfully built dataloaders:")
+        print(f"  Train batches: {len(train_loader)} (total samples: {len(train_loader.dataset)})")
+        print(f"  Val batches:   {len(val_loader)} (total samples: {len(val_loader.dataset)})")
+        if test_loader:
+            print(f"  Test batches:  {len(test_loader)} (total samples: {len(test_loader.dataset)})")
+        
+        # Test 1 batch if available
+        if len(train_loader) > 0:
+            sample_batch = next(iter(train_loader))
+            print(f"Sample batch image shape: {sample_batch['image'].shape}")
+            print(f"Sample batch mask shape:  {sample_batch['mask'].shape}")
+            print("Dataset check completed successfully!")
+        else:
+            print("No tiles found in data directory yet. Use preprocessing/tiling.py to generate tiles.")
+    except Exception as e:
+        print(f"Note: Could not load full batch (e.g. tiles directory may be empty or unpopulated): {e}")

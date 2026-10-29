@@ -90,6 +90,15 @@ function changeBasemap() {
 // ═══════════════════════════════════════════ API status ════
 function getApiEndpoint() {
   const el = document.getElementById('api-endpoint');
+  if (window.location && window.location.protocol && window.location.protocol.startsWith('http')) {
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    if (!isLocal) {
+      if (el && (!el.value || el.value.includes('localhost') || el.value.includes('127.0.0.1'))) {
+        el.value = window.location.origin;
+      }
+      return window.location.origin;
+    }
+  }
   if (el && el.value && el.value.trim()) {
     return el.value.trim().replace(/\/+$/, '');
   }
@@ -158,6 +167,22 @@ function clearFile() {
   updateProcessButton();
   document.getElementById('progress-wrap').style.display = 'none';
 }
+
+async function loadSampleOrthophoto(filename) {
+  showToast(`Loading sample ${filename}...`, 'info');
+  try {
+    const res = await fetch(`/data/raw/${filename}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}: /data/raw/${filename}`);
+    const blob = await res.blob();
+    const file = new File([blob], filename, { type: 'image/tiff' });
+    setFile(file);
+    showToast(`Loaded ${filename}! Click 'Extract Features' below to run.`, 'success');
+  } catch (err) {
+    console.error('Failed to load sample:', err);
+    showToast(`Failed to load sample: ${err.message}`, 'error');
+  }
+}
+window.loadSampleOrthophoto = loadSampleOrthophoto;
 
 // ═══════════════════════════════════════════ Folder Mode & Batch ════
 function setUploadMode(mode) {
@@ -394,6 +419,10 @@ async function processFile() {
 
     const formData = new FormData();
     formData.append('file', state.file);
+    const maskInput = document.getElementById('mask-input');
+    if (maskInput?.files?.[0]) {
+      formData.append('mask', maskInput.files[0]);
+    }
 
     const regularize = document.getElementById('setting-regularize')?.checked ?? true;
     const zipBlob = await uploadWithProgress(
@@ -429,6 +458,16 @@ async function processFile() {
 
     showToast('Feature extraction complete!', 'success');
     addHistoryEntry(state.file.name, geojsonData);
+
+    const runId = sanitizeRunId(state.file.name);
+    currentRunId = runId;
+    await fetchRunsAndPopulate();
+    const select = document.getElementById('dataset-select');
+    if (select) {
+      const match = Array.from(select.options).find(o => o.value === runId);
+      if (match) select.value = runId;
+    }
+    fetchModelAccuracy(runId);
 
   } catch (err) {
     console.error(err);
@@ -546,7 +585,19 @@ function uploadWithProgress(url, formData, onProgress) {
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve(xhr.response);
       } else {
-        reject(new Error(`Server returned ${xhr.status}`));
+        const blob = xhr.response;
+        if (blob && typeof blob.text === 'function') {
+          blob.text().then((t) => {
+            try {
+              const parsed = JSON.parse(t);
+              reject(new Error(parsed.detail || `Server returned ${xhr.status}`));
+            } catch {
+              reject(new Error(t || `Server returned ${xhr.status}`));
+            }
+          }).catch(() => reject(new Error(`Server returned ${xhr.status}`)));
+        } else {
+          reject(new Error(`Server returned ${xhr.status}`));
+        }
       }
     };
     xhr.onerror = () => reject(new Error('Network error'));
@@ -749,7 +800,7 @@ function setStep(activeStep) {
 }
 
 function switchTab(tab) {
-  ['dashboard', 'models', 'history', 'settings'].forEach(t => {
+  ['dashboard', 'models', 'history', 'settings', 'analysis'].forEach(t => {
     const btn = document.getElementById(`tab-${t}`);
     const panel = document.getElementById(`panel-${t}`);
     if (btn) btn.className = 'nav-tab' + (t === tab ? ' active' : '');
@@ -764,6 +815,10 @@ function switchTab(tab) {
   if (tab === 'models') {
     populateModelsPage();
   }
+  // Populate analysis run selector when switching to analysis tab
+  if (tab === 'analysis') {
+    populateAnalysisRunSelector();
+  }
 }
 
 async function populateModelsPage() {
@@ -777,9 +832,9 @@ async function populateModelsPage() {
     const data = await res.json();
 
     // Hero stats
-    setEl('mh-miou', `${(data.mean_iou * 100).toFixed(1)}%`);
-    setEl('mh-dice', `${(data.mean_dice * 100).toFixed(1)}%`);
-    setEl('mh-conf', `${(data.mean_confidence * 100).toFixed(1)}%`);
+    setEl('mh-miou', formatMetricPct(data.mean_iou));
+    setEl('mh-dice', formatMetricPct(data.mean_dice));
+    setEl('mh-conf', formatMetricPct(data.mean_confidence));
 
     // Per-class detailed metrics
     for (const cls of ['building', 'road', 'vegetation']) {
@@ -794,14 +849,14 @@ async function populateModelsPage() {
         const iouBar = document.getElementById(`md-bar-${cls}-iou`);
         const diceBar = document.getElementById(`md-bar-${cls}-dice`);
         const confBar = document.getElementById(`md-bar-${cls}-conf`);
-        if (iouBar) iouBar.style.width = `${(d.iou * 100).toFixed(0)}%`;
-        if (diceBar) diceBar.style.width = `${(d.dice * 100).toFixed(0)}%`;
-        if (confBar) confBar.style.width = `${(d.confidence * 100).toFixed(0)}%`;
+        if (iouBar) iouBar.style.width = `${metricBarWidth(d.iou)}%`;
+        if (diceBar) diceBar.style.width = `${metricBarWidth(d.dice)}%`;
+        if (confBar) confBar.style.width = `${metricBarWidth(d.confidence)}%`;
       }, 150);
 
-      setEl(`md-val-${cls}-iou`, `${(d.iou * 100).toFixed(1)}%`);
-      setEl(`md-val-${cls}-dice`, `${(d.dice * 100).toFixed(1)}%`);
-      setEl(`md-val-${cls}-conf`, `${(d.confidence * 100).toFixed(1)}%`);
+      setEl(`md-val-${cls}-iou`, formatMetricPct(d.iou));
+      setEl(`md-val-${cls}-dice`, formatMetricPct(d.dice));
+      setEl(`md-val-${cls}-conf`, formatMetricPct(d.confidence));
     }
   } catch (e) {
     console.warn('Could not populate models page:', e);
@@ -864,69 +919,19 @@ function renderHistory() {
   if (window.lucide) lucide.createIcons();
 }
 
-// ═══════════════════════════════════════════ Demo mode ════
-/**
- * Loads synthetic demo data so the map is populated even without an API.
- * Generates random polygons near Bengaluru, India.
- */
-function loadDemoData() {
-  const center = [12.9716, 77.5946];
+function sanitizeRunId(filename) {
+  const stem = String(filename || 'run').replace(/\.[^/.]+$/, '');
+  return stem.replace(/[^A-Za-z0-9_-]/g, '_') || `run_${Date.now()}`;
+}
 
-  function randomPoly(lat, lon, radiusDeg, nPoints = 6) {
-    const coords = [];
-    for (let i = 0; i < nPoints; i++) {
-      const angle = (i / nPoints) * 2 * Math.PI;
-      const r = radiusDeg * (0.6 + Math.random() * 0.4);
-      coords.push([lon + r * Math.cos(angle), lat + r * Math.sin(angle)]);
-    }
-    coords.push(coords[0]);
-    return { type: 'Polygon', coordinates: [coords] };
-  }
+function formatMetricPct(value) {
+  if (value == null || value === '' || Number.isNaN(Number(value))) return 'N/A';
+  return `${(Number(value) * 100).toFixed(1)}%`;
+}
 
-  const geojsonData = {};
-
-  const defs = [
-    { cls: 'building', n: 120, r: 0.0008 },
-    { cls: 'road',     n: 30,  r: 0.002  },
-    { cls: 'vegetation', n: 50, r: 0.0015 },
-  ];
-
-  for (const { cls, n, r } of defs) {
-    const features = Array.from({ length: n }, (_, i) => {
-      const lat = center[0] + (Math.random() - 0.5) * 0.08;
-      const lon = center[1] + (Math.random() - 0.5) * 0.08;
-      const area = (r * 111000) ** 2 * Math.PI * (0.5 + Math.random());
-      const props = {
-        feature_id: `demo-${cls}-${i}`,
-        class: cls,
-        area_sq_m: Math.round(area),
-        centroid_lat: parseFloat(lat.toFixed(6)),
-        centroid_lon: parseFloat(lon.toFixed(6)),
-      };
-      if (cls === 'building') {
-        const usable = Math.round(area * 0.70);
-        const kwp = parseFloat((usable * 0.15).toFixed(2));
-        const kwh = Math.round(kwp * 1450);
-        const co2 = parseFloat(((kwh * 0.82) / 1000).toFixed(2));
-        props.solar_usable_m2 = usable;
-        props.solar_kwp = kwp;
-        props.annual_kwh = kwh;
-        props.co2_offset_tons_yr = co2;
-      }
-      return {
-        type: 'Feature',
-        geometry: randomPoly(lat, lon, r, cls === 'road' ? 4 : 6),
-        properties: props,
-      };
-    });
-    geojsonData[cls] = { type: 'FeatureCollection', features };
-  }
-
-  renderLayers(geojsonData);
-  updateStats(geojsonData);
-  document.getElementById('map-empty').style.display = 'none';
-  document.getElementById('download-row').style.display = 'flex';
-  showToast('Demo data loaded — connect the API to use real orthophotos', 'info');
+function metricBarWidth(value) {
+  if (value == null || Number.isNaN(Number(value))) return 0;
+  return Math.max(0, Math.min(100, Number(value) * 100));
 }
 
 // ═══════════════════════════════════════════ Utilities ════
@@ -947,7 +952,7 @@ function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // ═══════════════════════════════════════════ Geo Heatmap ════
 let heatmapLayer = null;
-let currentRunId = 'odm_aukerman';
+let currentRunId = '';
 
 function toggleHeatmap() {
   const cb = document.getElementById('layer-heatmap');
@@ -1056,36 +1061,50 @@ async function fetchModelAccuracy(runId) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
 
-    // Update gauges
+    // Update gauges (IoU/Dice only when ground truth exists)
     animateGauge('gauge-iou-arc', 'gauge-iou-val', data.mean_iou);
     animateGauge('gauge-dice-arc', 'gauge-dice-val', data.mean_dice);
     animateGauge('gauge-conf-arc', 'gauge-conf-val', data.mean_confidence);
 
-    // Update per-class bars
+    // Update per-class bars — IoU if available, else softmax confidence
     for (const cls of ['building', 'road', 'vegetation']) {
       const clsData = data.per_class?.[cls];
       if (clsData) {
+        const metric = clsData.iou != null ? clsData.iou : clsData.confidence;
         const bar = document.getElementById(`acc-bar-${cls}`);
         const val = document.getElementById(`acc-val-${cls}`);
-        if (bar) bar.style.width = `${Math.round(clsData.iou * 100)}%`;
-        if (val) val.textContent = `${(clsData.iou * 100).toFixed(1)}%`;
+        if (bar) bar.style.width = `${metricBarWidth(metric).toFixed(0)}%`;
+        if (val) val.textContent = formatMetricPct(metric);
       }
     }
 
     // Update model info
+    const source = data.metrics_source === 'ground_truth' || data.has_ground_truth
+      ? 'IoU vs mask'
+      : data.metrics_source === 'test_split_evaluation'
+        ? 'Test-split eval'
+        : data.metrics_source === 'softmax_confidence'
+          ? 'Softmax confidence'
+          : 'No GT yet';
     setEl('acc-model-arch', data.model_architecture ? `Arch: ${data.model_architecture}` : '-');
-    setEl('acc-model-encoder', data.encoder ? `Enc: ${data.encoder}` : '-');
+    setEl('acc-model-encoder', source);
 
-    // Update badge
-    const overallPct = Math.round(data.mean_confidence * 100);
+    const headline = data.mean_iou != null ? data.mean_iou : data.mean_confidence;
     if (badge) {
-      badge.textContent = `${overallPct}% Conf`;
-      badge.style.background = overallPct > 75
-        ? 'rgba(16,185,129,0.18)' : overallPct > 50
-          ? 'rgba(245,158,11,0.18)' : 'rgba(239,68,68,0.18)';
-      badge.style.color = overallPct > 75
-        ? '#10b981' : overallPct > 50
-          ? '#f59e0b' : '#ef4444';
+      if (headline == null) {
+        badge.textContent = 'N/A';
+        badge.style.background = 'rgba(100,116,139,0.18)';
+        badge.style.color = '#64748b';
+      } else {
+        const overallPct = Math.round(Number(headline) * 100);
+        badge.textContent = data.mean_iou != null ? `${overallPct}% mIoU` : `${overallPct}% Conf`;
+        badge.style.background = overallPct > 75
+          ? 'rgba(16,185,129,0.18)' : overallPct > 50
+            ? 'rgba(245,158,11,0.18)' : 'rgba(239,68,68,0.18)';
+        badge.style.color = overallPct > 75
+          ? '#10b981' : overallPct > 50
+            ? '#f59e0b' : '#ef4444';
+      }
     }
 
   } catch (err) {
@@ -1103,9 +1122,15 @@ function animateGauge(arcId, valId, value) {
   const valEl = document.getElementById(valId);
   if (!arc || !valEl) return;
 
+  if (value == null || Number.isNaN(Number(value))) {
+    arc.setAttribute('stroke-dasharray', `0 94.25`);
+    valEl.textContent = 'N/A';
+    return;
+  }
+
   // Semi-circle arc length (~94.25 for r=30 half-circle)
   const totalArc = 94.25;
-  const targetDash = value * totalArc;
+  const targetDash = Number(value) * totalArc;
 
   // Animate
   let current = 0;
@@ -1189,15 +1214,753 @@ async function fetchRunsAndPopulate() {
       const data = await res.json();
       const runs = data.runs || [];
       if (runs.length > 0) {
-        select.innerHTML = runs.map(r => `
+        select.innerHTML = '<option value="">— Select a live run —</option>' + runs.map(r => `
           <option value="${r.id}">${r.name || r.id}</option>
         `).join('');
+        const preferred = currentRunId && runs.some(r => r.id === currentRunId)
+          ? currentRunId
+          : runs[0].id;
+        select.value = preferred;
+      } else {
+        select.innerHTML = '<option value="">— Upload or process an orthophoto —</option>';
       }
     }
   } catch (err) {
     console.warn('Could not fetch runs:', err);
   }
 }
+
+// ═══════════════════════════════════════════ Analysis Module ════
+
+function switchAnalysisSubtab(sub) {
+  const dsBtn = document.getElementById('subtab-dataset');
+  const prBtn = document.getElementById('subtab-prediction');
+  const mmBtn = document.getElementById('subtab-multimodel');
+  const resBtn = document.getElementById('subtab-resources');
+  const dsPanel = document.getElementById('analysis-dataset-panel');
+  const prPanel = document.getElementById('analysis-prediction-panel');
+  const mmPanel = document.getElementById('analysis-multimodel-panel');
+  const resPanel = document.getElementById('analysis-resources-panel');
+
+  // Reset active classes
+  dsBtn?.classList.remove('active');
+  prBtn?.classList.remove('active');
+  mmBtn?.classList.remove('active');
+  resBtn?.classList.remove('active');
+  if (dsPanel) dsPanel.style.display = 'none';
+  if (prPanel) prPanel.style.display = 'none';
+  if (mmPanel) mmPanel.style.display = 'none';
+  if (resPanel) resPanel.style.display = 'none';
+
+  if (sub === 'dataset') {
+    dsBtn?.classList.add('active');
+    if (dsPanel) dsPanel.style.display = '';
+  } else if (sub === 'prediction') {
+    prBtn?.classList.add('active');
+    if (prPanel) prPanel.style.display = '';
+    populateAnalysisRunSelector();
+  } else if (sub === 'multimodel') {
+    mmBtn?.classList.add('active');
+    if (mmPanel) mmPanel.style.display = '';
+    loadMultiModelAccuracy();
+  } else if (sub === 'resources') {
+    resBtn?.classList.add('active');
+    if (resPanel) resPanel.style.display = '';
+    loadDataResources();
+  }
+  if (window.lucide) lucide.createIcons();
+}
+
+// ═══════════════════════════════════════════ Multi-Model Training & Benchmark ════
+
+async function loadMultiModelAccuracy() {
+  const statusEl = document.getElementById('multimodel-status');
+  const tbody = document.getElementById('mm-leaderboard-body');
+  const statsGrid = document.getElementById('mm-stats-grid');
+  const chartCard = document.getElementById('mm-chart-card');
+  const chartImg = document.getElementById('mm-chart-img');
+
+  if (statusEl) { statusEl.textContent = 'Loading accuracy report...'; statusEl.style.color = ''; }
+
+  const endpoint = getApiEndpoint();
+  try {
+    const res = await fetch(`${endpoint}/analysis/multi-model-accuracy`, { signal: AbortSignal.timeout(30000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const report = await res.json();
+    const models = report.models || [];
+
+    if (models.length > 0) {
+      // Top stats
+      const best = models[0];
+      setEl('mm-top-model', best.name);
+      setEl('mm-top-miou', `${best.mean_iou_pct}%`);
+      
+      const bestBldg = [...models].sort((a,b) => (b.class_breakdown?.building?.iou || 0) - (a.class_breakdown?.building?.iou || 0))[0];
+      setEl('mm-top-bldg', `${bestBldg.class_breakdown?.building?.iou || 0}% (${bestBldg.name.split('(')[0].trim()})`);
+
+      const bestRoad = [...models].sort((a,b) => (b.class_breakdown?.road?.iou || 0) - (a.class_breakdown?.road?.iou || 0))[0];
+      setEl('mm-top-road', `${bestRoad.class_breakdown?.road?.iou || 0}% (${bestRoad.name.split('(')[0].trim()})`);
+
+      const fastest = [...models].sort((a,b) => b.inference_fps - a.inference_fps)[0];
+      setEl('mm-top-fps', `${fastest.inference_fps} fps (${fastest.name.split('(')[0].trim()})`);
+
+      if (statsGrid) statsGrid.style.display = '';
+
+      // Leaderboard table
+      if (tbody) {
+        tbody.innerHTML = models.map((m, idx) => {
+          const rank = m.rank || (idx + 1);
+          let rankBadge = `<span style="font-weight:700;color:var(--text-muted);">${rank}</span>`;
+          if (rank === 1) rankBadge = `<span style="background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#000;font-size:0.7rem;font-weight:800;padding:2px 8px;border-radius:99px;">★ 1st</span>`;
+          else if (rank === 2) rankBadge = `<span style="background:rgba(56,189,248,0.2);color:#38bdf8;font-size:0.7rem;font-weight:800;padding:2px 8px;border-radius:99px;">2nd</span>`;
+          else if (rank === 3) rankBadge = `<span style="background:rgba(99,102,241,0.2);color:#6366f1;font-size:0.7rem;font-weight:800;padding:2px 8px;border-radius:99px;">3rd</span>`;
+
+          const bldg = m.class_breakdown?.building?.iou || 0;
+          const road = m.class_breakdown?.road?.iou || 0;
+          const veg = m.class_breakdown?.vegetation?.iou || 0;
+
+          return `
+            <tr style="${rank === 1 ? 'background:rgba(99,102,241,0.12); font-weight:600;' : ''}">
+              <td style="text-align:center;">${rankBadge}</td>
+              <td>
+                <strong>${m.name}</strong>
+                <div style="font-size:0.7rem;color:var(--text-muted);">${m.description}</div>
+              </td>
+              <td><code>${m.parameters_m}M</code></td>
+              <td><strong style="color:#10b981;font-size:0.95rem;">${m.mean_iou_pct}%</strong></td>
+              <td><span style="color:#f59e0b;font-weight:600;">${bldg}%</span></td>
+              <td><span style="color:#38bdf8;font-weight:600;">${road}%</span></td>
+              <td><span style="color:#22c55e;font-weight:600;">${veg}%</span></td>
+              <td>${m.mean_f1_pct}%</td>
+              <td>${m.pixel_accuracy_pct}%</td>
+              <td><span style="color:#ec4899;font-weight:600;">${m.inference_fps} fps</span></td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      // Chart
+      if (chartCard && chartImg) {
+        chartImg.src = `${endpoint}/analysis/multi-model-chart?t=${Date.now()}`;
+        chartCard.style.display = '';
+      }
+
+      if (statusEl) { statusEl.textContent = `✓ Evaluated ${models.length} architectures`; statusEl.style.color = '#22c55e'; }
+    } else {
+      if (tbody) tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-muted);padding:16px;">No benchmark data available. Click "Train & Benchmark Models" to run.</td></tr>';
+      if (statusEl) statusEl.textContent = '';
+    }
+  } catch (e) {
+    console.error('Failed to load multi-model accuracy:', e);
+    if (statusEl) { statusEl.textContent = `✗ Failed: ${e.message}`; statusEl.style.color = '#ef4444'; }
+  }
+  if (window.lucide) lucide.createIcons();
+}
+
+async function executeMultiModelTraining() {
+  const checkboxes = document.querySelectorAll('input[name="mm-arch"]:checked');
+  const selectedModels = Array.from(checkboxes).map(cb => cb.value);
+  const epochs = parseInt(document.getElementById('mm-epochs')?.value || '3', 10);
+  const lr = parseFloat(document.getElementById('mm-lr')?.value || '0.0001');
+  const batchSize = parseInt(document.getElementById('mm-batch-size')?.value || '4', 10);
+  const statusEl = document.getElementById('multimodel-status');
+  const btn = document.getElementById('btn-run-multimodel');
+
+  if (selectedModels.length === 0) {
+    showToast('Please select at least one architecture to train/benchmark.', 'warning');
+    return;
+  }
+
+  if (btn) btn.disabled = true;
+  if (statusEl) { statusEl.textContent = `Training ${selectedModels.length} models (${epochs} epochs)...`; statusEl.style.color = ''; }
+
+  const endpoint = getApiEndpoint();
+  const url = `${endpoint}/analysis/train-multi-model?models=${encodeURIComponent(selectedModels.join(','))}&epochs=${epochs}&lr=${lr}&batch_size=${batchSize}`;
+
+  try {
+    const res = await fetch(url, { method: 'POST', signal: AbortSignal.timeout(120000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const report = await res.json();
+    showToast(`Multi-model training complete! Best: ${report.best_model} (${report.best_miou}% mIoU)`, 'success');
+    await loadMultiModelAccuracy();
+  } catch (e) {
+    showToast(`Multi-model training error: ${e.message}`, 'error');
+    if (statusEl) { statusEl.textContent = `✗ ${e.message}`; statusEl.style.color = '#ef4444'; }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function populateAnalysisRunSelector() {
+  const sel = document.getElementById('analysis-run-select');
+  if (!sel) return;
+  const endpoint = getApiEndpoint();
+  try {
+    const res = await fetch(`${endpoint}/runs`, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return;
+    const data = await res.json();
+    const runs = data.runs || [];
+    sel.innerHTML = '<option value="">— Select a run —</option>';
+    runs.forEach(r => {
+      const opt = document.createElement('option');
+      opt.value = r.id;
+      opt.textContent = r.name || r.id;
+      sel.appendChild(opt);
+    });
+  } catch (e) {
+    console.warn('Could not fetch runs for analysis:', e);
+  }
+}
+
+// ═══════════════════════════════════════════ Data Resources Management ════
+
+async function loadDataResources() {
+  const statusEl = document.getElementById('resources-status');
+  const tbody = document.getElementById('resources-table-body');
+  const orthoSelect = document.getElementById('tile-ortho-select');
+  const maskSelect = document.getElementById('tile-mask-select');
+
+  if (statusEl) { statusEl.textContent = 'Refreshing...'; statusEl.style.color = ''; }
+
+  const endpoint = getApiEndpoint();
+  try {
+    const res = await fetch(`${endpoint}/analysis/resources`, { signal: AbortSignal.timeout(10000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const items = data.resources || [];
+
+    if (tbody) {
+      if (items.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:16px;">No resources found in workspace.</td></tr>';
+      } else {
+        tbody.innerHTML = items.map(item => {
+          let badgeColor = '#38bdf8';
+          let badgeBg = 'rgba(56,189,248,0.12)';
+          if (item.category.includes('Mask')) { badgeColor = '#f59e0b'; badgeBg = 'rgba(245,158,11,0.12)'; }
+          else if (item.category.includes('Tiled') || item.category.includes('Benchmark')) { badgeColor = '#22c55e'; badgeBg = 'rgba(34,197,94,0.12)'; }
+          else if (item.category.includes('Model')) { badgeColor = '#a855f7'; badgeBg = 'rgba(168,85,247,0.12)'; }
+
+          let sizeDetail = item.tile_count ? `${item.tile_count} tiles (${item.size_mb} MB)` : `${item.size_mb} MB`;
+
+          let actionsHtml = '';
+          if (item.category === 'Raw Orthophoto') {
+            actionsHtml = `
+              <button class="btn-ghost" style="padding:3px 8px;font-size:0.72rem;" onclick="selectForTiling('${item.name}')">
+                <i data-lucide="scissors" style="width:12px;height:12px;"></i> Tile
+              </button>
+              <button class="btn-ghost" style="padding:3px 8px;font-size:0.72rem;color:#ef4444;" onclick="deleteDataResource('${item.name}')">
+                <i data-lucide="trash-2" style="width:12px;height:12px;"></i>
+              </button>
+            `;
+          } else if (item.category.includes('Tiled')) {
+            actionsHtml = `
+              <button class="btn-ghost" style="padding:3px 8px;font-size:0.72rem;color:#22c55e;" onclick="switchAnalysisSubtab('dataset'); loadDatasetAnalysis();">
+                <i data-lucide="bar-chart-2" style="width:12px;height:12px;"></i> Analyze
+              </button>
+            `;
+          } else {
+            actionsHtml = `
+              <button class="btn-ghost" style="padding:3px 8px;font-size:0.72rem;color:#ef4444;" onclick="deleteDataResource('${item.name}')">
+                <i data-lucide="trash-2" style="width:12px;height:12px;"></i>
+              </button>
+            `;
+          }
+
+          return `
+            <tr>
+              <td><strong>${item.name}</strong></td>
+              <td><span style="font-size:0.72rem;padding:2px 8px;border-radius:99px;background:${badgeBg};color:${badgeColor};font-weight:600;">${item.category}</span></td>
+              <td><code style="font-size:0.75rem;color:var(--text-muted);">${item.path}</code></td>
+              <td>${sizeDetail}</td>
+              <td style="white-space:nowrap;">${actionsHtml}</td>
+            </tr>
+          `;
+        }).join('');
+      }
+    }
+
+    // Populate tiling dropdowns
+    if (orthoSelect) {
+      const rawOrthos = items.filter(i => i.category === 'Raw Orthophoto');
+      orthoSelect.innerHTML = '<option value="">— Select from data/raw/ —</option>' + 
+        rawOrthos.map(o => `<option value="${o.name}">${o.name} (${o.size_mb} MB)</option>`).join('');
+    }
+
+    if (maskSelect) {
+      const rawMasks = items.filter(i => i.category === 'Ground Truth Mask');
+      maskSelect.innerHTML = '<option value="">(Auto-detect matching mask)</option>' + 
+        rawMasks.map(m => `<option value="${m.name}">${m.name} (${m.size_mb} MB)</option>`).join('');
+    }
+
+    if (statusEl) { statusEl.textContent = `✓ ${items.length} resource(s) active`; statusEl.style.color = '#22c55e'; }
+  } catch (e) {
+    console.error('Failed to load resources:', e);
+    if (statusEl) { statusEl.textContent = `✗ Failed: ${e.message}`; statusEl.style.color = '#ef4444'; }
+  }
+  if (window.lucide) lucide.createIcons();
+}
+
+function selectForTiling(orthoName) {
+  const sel = document.getElementById('tile-ortho-select');
+  if (sel) {
+    sel.value = orthoName;
+    sel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    showToast(`Selected '${orthoName}' for tiling.`);
+  }
+}
+
+async function handleResourceUpload(event, type) {
+  event.preventDefault();
+  const endpoint = getApiEndpoint();
+  const statusEl = document.getElementById('resources-status');
+
+  const formData = new FormData();
+
+  if (type === 'raw_ortho') {
+    const orthoInput = document.getElementById('res-ortho-file');
+    const maskInput = document.getElementById('res-mask-file');
+    const btn = document.getElementById('btn-upload-raw');
+
+    if (!orthoInput || !orthoInput.files || orthoInput.files.length === 0) {
+      showToast('Please select a raw orthophoto file.', 'warning');
+      return;
+    }
+
+    formData.append('file', orthoInput.files[0]);
+    if (maskInput && maskInput.files && maskInput.files.length > 0) {
+      formData.append('mask_file', maskInput.files[0]);
+    }
+
+    if (btn) btn.disabled = true;
+    if (statusEl) { statusEl.textContent = 'Uploading orthophoto to data/raw/...'; statusEl.style.color = ''; }
+
+    try {
+      const res = await fetch(`${endpoint}/analysis/upload-resource?resource_type=raw_ortho`, {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      showToast(data.message || 'Orthophoto uploaded successfully!', 'success');
+      document.getElementById('form-upload-raw')?.reset();
+      await loadDataResources();
+    } catch (e) {
+      showToast(`Upload failed: ${e.message}`, 'error');
+      if (statusEl) { statusEl.textContent = `✗ ${e.message}`; statusEl.style.color = '#ef4444'; }
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+
+  } else if (type === 'dataset_zip') {
+    const zipInput = document.getElementById('res-zip-file');
+    const btn = document.getElementById('btn-upload-zip');
+
+    if (!zipInput || !zipInput.files || zipInput.files.length === 0) {
+      showToast('Please select a ZIP dataset archive.', 'warning');
+      return;
+    }
+
+    formData.append('file', zipInput.files[0]);
+
+    if (btn) btn.disabled = true;
+    if (statusEl) { statusEl.textContent = 'Extracting ZIP archive into data/tiles/...'; statusEl.style.color = ''; }
+
+    try {
+      const res = await fetch(`${endpoint}/analysis/upload-resource?resource_type=dataset_zip`, {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      showToast(data.message || 'Dataset ZIP extracted successfully!', 'success');
+      document.getElementById('form-upload-zip')?.reset();
+      await loadDataResources();
+    } catch (e) {
+      showToast(`ZIP ingest failed: ${e.message}`, 'error');
+      if (statusEl) { statusEl.textContent = `✗ ${e.message}`; statusEl.style.color = '#ef4444'; }
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+}
+
+async function executeTilingProcess() {
+  const orthoSelect = document.getElementById('tile-ortho-select');
+  const maskSelect = document.getElementById('tile-mask-select');
+  const sizeSelect = document.getElementById('tile-size-select');
+  const overlapSelect = document.getElementById('tile-overlap-select');
+  const statusEl = document.getElementById('tiling-status');
+  const btn = document.getElementById('btn-run-tiling');
+
+  const orthoName = orthoSelect?.value;
+  if (!orthoName) {
+    showToast('Please select an orthophoto to tile.', 'warning');
+    return;
+  }
+
+  const maskName = maskSelect?.value || '';
+  const tileSize = parseInt(sizeSelect?.value || '256', 10);
+  const overlap = parseFloat(overlapSelect?.value || '0.15');
+
+  if (btn) btn.disabled = true;
+  if (statusEl) { statusEl.textContent = `Tiling '${orthoName}'...`; statusEl.style.color = ''; }
+
+  const endpoint = getApiEndpoint();
+  const url = `${endpoint}/analysis/tile-resource?ortho_name=${encodeURIComponent(orthoName)}&mask_name=${encodeURIComponent(maskName)}&tile_size=${tileSize}&overlap=${overlap}`;
+
+  try {
+    const res = await fetch(url, { method: 'POST' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    showToast(data.message || 'Tiling completed successfully!', 'success');
+    if (statusEl) { statusEl.textContent = `✓ Generated ${data.total_tiles} tiles (${tileSize}x${tileSize})`; statusEl.style.color = '#22c55e'; }
+    await loadDataResources();
+  } catch (e) {
+    showToast(`Tiling failed: ${e.message}`, 'error');
+    if (statusEl) { statusEl.textContent = `✗ Failed: ${e.message}`; statusEl.style.color = '#ef4444'; }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function deleteDataResource(filename) {
+  if (!confirm(`Are you sure you want to delete '${filename}'?`)) return;
+  const endpoint = getApiEndpoint();
+  try {
+    const res = await fetch(`${endpoint}/analysis/resources/${encodeURIComponent(filename)}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    showToast(`Deleted '${filename}'`, 'info');
+    await loadDataResources();
+  } catch (e) {
+    showToast(`Delete failed: ${e.message}`, 'error');
+  }
+}
+
+async function loadDatasetAnalysis() {
+  const statusEl = document.getElementById('dataset-analysis-status');
+  const btn = document.getElementById('btn-run-dataset-analysis');
+  if (btn) btn.disabled = true;
+  if (statusEl) statusEl.textContent = 'Analyzing...';
+
+  const endpoint = getApiEndpoint();
+  try {
+    const res = await fetch(`${endpoint}/analysis/dataset`, { signal: AbortSignal.timeout(30000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    // Populate stat cards
+    const ts = data.tile_stats || {};
+    setEl('ds-tile-count', ts.count || 0);
+    setEl('ds-masks-found', ts.masks_found || 0);
+    setEl('ds-total-size', `${ts.total_size_mb || 0} MB`);
+    setEl('ds-imbalance', data.imbalance_ratio || '—');
+    document.getElementById('dataset-stats-grid').style.display = '';
+
+    // Draw class distribution chart
+    drawClassDistChart(data);
+    drawClassWeightsChart(data);
+    document.getElementById('dataset-charts-row').style.display = '';
+
+    // Split summary
+    const ss = data.split_summary || {};
+    drawSplitBars(ss);
+    document.getElementById('dataset-split-card').style.display = '';
+
+    // Load sample grid image
+    const gridImg = document.getElementById('ds-sample-grid-img');
+    if (gridImg) {
+      gridImg.src = `${endpoint}/analysis/dataset/chart?t=${Date.now()}`;
+      gridImg.onerror = () => { document.getElementById('dataset-sample-grid').style.display = 'none'; };
+      gridImg.onload = () => { document.getElementById('dataset-sample-grid').style.display = ''; };
+    }
+
+    if (statusEl) statusEl.textContent = '✓ Analysis complete';
+    if (statusEl) statusEl.style.color = '#22c55e';
+  } catch (e) {
+    console.error('Dataset analysis error:', e);
+    if (statusEl) { statusEl.textContent = `✗ Failed: ${e.message}`; statusEl.style.color = '#ef4444'; }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+  if (window.lucide) lucide.createIcons();
+}
+
+async function loadPredictionAnalysis(runId) {
+  if (!runId) return;
+  const statusEl = document.getElementById('prediction-analysis-status');
+  if (statusEl) { statusEl.textContent = 'Analyzing...'; statusEl.style.color = ''; }
+
+  const endpoint = getApiEndpoint();
+  try {
+    const res = await fetch(`${endpoint}/analysis/prediction/${encodeURIComponent(runId)}`, {
+      signal: AbortSignal.timeout(30000)
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    // Stats cards
+    setEl('pred-total-features', data.total_features || 0);
+    setEl('pred-total-area', (data.total_mapped_area_m2 || 0).toLocaleString(undefined, { maximumFractionDigits: 1 }));
+    setEl('pred-density', data.features_per_hectare || 0);
+    setEl('pred-hectares', (data.total_mapped_area_hectares || 0).toFixed(4));
+    document.getElementById('pred-stats-grid').style.display = '';
+
+    // Charts
+    drawLandUsePie(data);
+    drawFeatureCountBars(data);
+    document.getElementById('pred-charts-row').style.display = '';
+
+    // Per-class insights
+    const pc = data.per_class || {};
+    const b = pc.building || {};
+    setEl('pi-bldg-count', b.count || 0);
+    setEl('pi-bldg-area', `${(b.total_area_m2 || 0).toLocaleString()} m²`);
+    setEl('pi-bldg-mean', `${(b.mean_area_m2 || 0).toFixed(1)} m²`);
+    setEl('pi-bldg-regularity', b.regularity || 'N/A');
+    setEl('pi-bldg-compact', (b.mean_compactness || 0).toFixed(4));
+    setEl('pi-bldg-solar', `${(b.total_solar_kwp || 0).toFixed(1)} kWp`);
+
+    const r = pc.road || {};
+    setEl('pi-road-count', r.count || 0);
+    setEl('pi-road-area', `${(r.total_area_m2 || 0).toLocaleString()} m²`);
+    setEl('pi-road-length', `${(r.total_road_length_m || 0).toFixed(1)} m`);
+    setEl('pi-road-width', `${(r.avg_width_m || 0).toFixed(1)} m`);
+    setEl('pi-road-segment', `${(r.mean_segment_length_m || 0).toFixed(1)} m`);
+
+    const v = pc.vegetation || {};
+    setEl('pi-veg-count', v.count || 0);
+    setEl('pi-veg-canopy', `${(v.canopy_area_m2 || 0).toLocaleString()} m²`);
+    setEl('pi-veg-frag', (v.fragmentation_index || 0).toFixed(4));
+    setEl('pi-veg-density', `${(v.patch_density || 0).toFixed(1)} /ha`);
+    setEl('pi-veg-mean', `${(v.mean_area_m2 || 0).toFixed(1)} m²`);
+
+    document.getElementById('pred-insights-grid').style.display = '';
+    if (statusEl) { statusEl.textContent = '✓ Analysis complete'; statusEl.style.color = '#22c55e'; }
+  } catch (e) {
+    console.error('Prediction analysis error:', e);
+    if (statusEl) { statusEl.textContent = `✗ Failed: ${e.message}`; statusEl.style.color = '#ef4444'; }
+  }
+  if (window.lucide) lucide.createIcons();
+}
+
+
+// ─── Canvas chart helpers ───────────────────────────────────
+
+function drawClassDistChart(data) {
+  const canvas = document.getElementById('chart-class-dist');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const dist = data.class_distribution || {};
+  const names = Object.keys(dist);
+  const pcts = names.map(n => dist[n].percentage || 0);
+  const colors = ['#64748b', '#ef4444', '#a855f7', '#22c55e'];
+
+  const barW = Math.min(60, (W - 80) / names.length - 10);
+  const maxVal = Math.max(...pcts, 1);
+  const chartH = H - 60;
+  const startX = 50;
+
+  // Y axis
+  ctx.strokeStyle = '#333'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(startX, 10); ctx.lineTo(startX, chartH + 10); ctx.stroke();
+
+  names.forEach((name, i) => {
+    const x = startX + 20 + i * (barW + 20);
+    const barH = (pcts[i] / maxVal) * (chartH - 20);
+    const y = chartH + 10 - barH;
+
+    // Bar
+    const grad = ctx.createLinearGradient(x, y, x, chartH + 10);
+    grad.addColorStop(0, colors[i] || '#38bdf8');
+    grad.addColorStop(1, (colors[i] || '#38bdf8') + '44');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.roundRect(x, y, barW, barH, [4, 4, 0, 0]);
+    ctx.fill();
+
+    // Value label
+    ctx.fillStyle = '#e2e8f0'; ctx.font = 'bold 11px Inter, sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(`${pcts[i].toFixed(1)}%`, x + barW / 2, y - 6);
+
+    // X label
+    ctx.fillStyle = '#94a3b8'; ctx.font = '10px Inter, sans-serif';
+    ctx.fillText(name, x + barW / 2, chartH + 28);
+  });
+}
+
+function drawClassWeightsChart(data) {
+  const canvas = document.getElementById('chart-class-weights');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const names = data.class_names || [];
+  const weights = data.class_weights || [];
+  const colors = ['#64748b', '#ef4444', '#a855f7', '#22c55e'];
+
+  const barW = Math.min(60, (W - 80) / names.length - 10);
+  const maxVal = Math.max(...weights, 1);
+  const chartH = H - 60;
+  const startX = 50;
+
+  ctx.strokeStyle = '#333'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(startX, 10); ctx.lineTo(startX, chartH + 10); ctx.stroke();
+
+  // Reference line at 1.0
+  const refY = chartH + 10 - (1.0 / maxVal) * (chartH - 20);
+  ctx.strokeStyle = '#f59e0b44'; ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.moveTo(startX, refY); ctx.lineTo(W - 10, refY); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#f59e0b'; ctx.font = '9px Inter, sans-serif'; ctx.textAlign = 'left';
+  ctx.fillText('1.0 (balanced)', startX + 4, refY - 4);
+
+  names.forEach((name, i) => {
+    const x = startX + 20 + i * (barW + 20);
+    const barH = (weights[i] / maxVal) * (chartH - 20);
+    const y = chartH + 10 - barH;
+
+    const grad = ctx.createLinearGradient(x, y, x, chartH + 10);
+    grad.addColorStop(0, colors[i] || '#38bdf8');
+    grad.addColorStop(1, (colors[i] || '#38bdf8') + '44');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.roundRect(x, y, barW, barH, [4, 4, 0, 0]);
+    ctx.fill();
+
+    ctx.fillStyle = '#e2e8f0'; ctx.font = 'bold 11px Inter, sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(weights[i].toFixed(2), x + barW / 2, y - 6);
+
+    ctx.fillStyle = '#94a3b8'; ctx.font = '10px Inter, sans-serif';
+    ctx.fillText(name, x + barW / 2, chartH + 28);
+  });
+}
+
+function drawSplitBars(ss) {
+  const container = document.getElementById('ds-split-bars');
+  if (!container) return;
+  const total = (ss.train || 0) + (ss.val || 0) + (ss.test || 0);
+  if (total === 0) { container.innerHTML = '<span style="color:#94a3b8;">No data</span>'; return; }
+
+  const pTrain = ((ss.train / total) * 100).toFixed(0);
+  const pVal = ((ss.val / total) * 100).toFixed(0);
+  const pTest = ((ss.test / total) * 100).toFixed(0);
+
+  container.innerHTML = `
+    <div class="split-bar-row">
+      <div class="split-bar" style="flex:${ss.train};background:linear-gradient(135deg,#38bdf8,#0ea5e9);border-radius:6px 0 0 6px;">
+        <span>Train ${pTrain}% (${ss.train})</span>
+      </div>
+      <div class="split-bar" style="flex:${ss.val};background:linear-gradient(135deg,#a855f7,#7c3aed);">
+        <span>Val ${pVal}% (${ss.val})</span>
+      </div>
+      <div class="split-bar" style="flex:${ss.test};background:linear-gradient(135deg,#f59e0b,#d97706);border-radius:0 6px 6px 0;">
+        <span>Test ${pTest}% (${ss.test})</span>
+      </div>
+    </div>
+  `;
+}
+
+function drawLandUsePie(data) {
+  const canvas = document.getElementById('chart-land-use');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const lu = data.land_use || {};
+  const classes = ['building', 'road', 'vegetation'];
+  const colors = ['#ef4444', '#a855f7', '#22c55e'];
+  const labels = classes.map(c => `${c} ${(lu[c]?.percentage || 0).toFixed(1)}%`);
+  const values = classes.map(c => lu[c]?.percentage || 0);
+  const total = values.reduce((a, b) => a + b, 0);
+
+  if (total === 0) {
+    ctx.fillStyle = '#94a3b8'; ctx.font = '14px Inter, sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('No features detected', W / 2, H / 2);
+    return;
+  }
+
+  const cx = W / 2 - 40, cy = H / 2, radius = Math.min(W, H) / 2 - 40;
+  let startAngle = -Math.PI / 2;
+
+  values.forEach((val, i) => {
+    const sliceAngle = (val / total) * 2 * Math.PI;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, radius, startAngle, startAngle + sliceAngle);
+    ctx.closePath();
+    ctx.fillStyle = colors[i];
+    ctx.fill();
+    ctx.strokeStyle = '#0f1117'; ctx.lineWidth = 3; ctx.stroke();
+    startAngle += sliceAngle;
+  });
+
+  // Inner circle for donut effect
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius * 0.5, 0, 2 * Math.PI);
+  ctx.fillStyle = '#14141f'; ctx.fill();
+
+  // Total in center
+  ctx.fillStyle = '#e2e8f0'; ctx.font = 'bold 16px Inter, sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText(`${total.toFixed(0)}%`, cx, cy + 5);
+
+  // Legend
+  const legendX = W - 110;
+  classes.forEach((cls, i) => {
+    const ly = 40 + i * 30;
+    ctx.fillStyle = colors[i];
+    ctx.fillRect(legendX, ly, 12, 12);
+    ctx.fillStyle = '#e2e8f0'; ctx.font = '11px Inter, sans-serif'; ctx.textAlign = 'left';
+    ctx.fillText(labels[i], legendX + 18, ly + 10);
+  });
+}
+
+function drawFeatureCountBars(data) {
+  const canvas = document.getElementById('chart-feature-count');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const pc = data.per_class || {};
+  const classes = ['building', 'road', 'vegetation'];
+  const colors = ['#ef4444', '#a855f7', '#22c55e'];
+  const counts = classes.map(c => pc[c]?.count || 0);
+
+  const barW = Math.min(70, (W - 80) / classes.length - 20);
+  const maxVal = Math.max(...counts, 1);
+  const chartH = H - 60;
+  const startX = 50;
+
+  ctx.strokeStyle = '#333'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(startX, 10); ctx.lineTo(startX, chartH + 10); ctx.stroke();
+
+  classes.forEach((cls, i) => {
+    const x = startX + 25 + i * (barW + 30);
+    const barH = (counts[i] / maxVal) * (chartH - 20);
+    const y = chartH + 10 - barH;
+
+    const grad = ctx.createLinearGradient(x, y, x, chartH + 10);
+    grad.addColorStop(0, colors[i]);
+    grad.addColorStop(1, colors[i] + '44');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.roundRect(x, y, barW, barH, [4, 4, 0, 0]);
+    ctx.fill();
+
+    ctx.fillStyle = '#e2e8f0'; ctx.font = 'bold 12px Inter, sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(counts[i], x + barW / 2, y - 8);
+
+    ctx.fillStyle = '#94a3b8'; ctx.font = '11px Inter, sans-serif';
+    ctx.fillText(cls, x + barW / 2, chartH + 28);
+  });
+}
+
 
 // ═══════════════════════════════════════════ Global Window Exports ════
 Object.assign(window, {
@@ -1224,17 +1987,26 @@ Object.assign(window, {
   updateOpacity,
   downloadGeoJSON,
   changeBasemap,
-  loadDemoData,
   loadProcessedRun,
   onDatasetSelectChange,
   toggleHeatmap,
   refreshHeatmap,
   updateHeatmapRadius,
   fetchModelAccuracy,
+  switchAnalysisSubtab,
+  loadDatasetAnalysis,
+  loadPredictionAnalysis,
+  loadMultiModelAccuracy,
+  executeMultiModelTraining,
+  loadDataResources,
+  handleResourceUpload,
+  executeTilingProcess,
+  deleteDataResource,
+  selectForTiling,
 });
 
 // ═══════════════════════════════════════════ Init ════
-document.addEventListener('DOMContentLoaded', async () => {
+async function initApp() {
   if (window.lucide) {
     lucide.createIcons();
   }
@@ -1252,13 +2024,24 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Poll API status every 15s
   setInterval(checkApiStatus, 15000);
 
-  // Fetch available server runs and auto-load the latest run
+  // Load the newest live inference run (no synthetic demo data)
   try {
     await fetchRunsAndPopulate();
-    // Automatically load Aukerman (or first available run) so the live view is instantly populated
-    await loadProcessedRun('odm_aukerman');
+    const select = document.getElementById('dataset-select');
+    if (select && select.value) {
+      await loadProcessedRun(select.value);
+    } else {
+      fetchModelAccuracy('');
+    }
   } catch (e) {
     console.warn('Could not auto-load run:', e);
+    fetchModelAccuracy('');
   }
-});
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initApp);
+} else {
+  initApp();
+}
 

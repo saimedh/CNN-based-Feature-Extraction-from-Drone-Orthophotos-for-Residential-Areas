@@ -183,10 +183,10 @@
         <span>or</span>
       </div>
 
-      <!-- Demo access -->
-      <a href="demo.html" class="btn-demo-access">
-        <i data-lucide="play-circle"></i>
-        <span>Try Demo Without Account</span>
+      <!-- Quick dashboard entry -->
+      <a href="index.html" class="btn-demo-access" onclick="event.preventDefault(); localStorage.setItem('orthoSegUser', JSON.stringify({name:'Analyst', email:'analyst@local'})); window.location.href='index.html';">
+        <i data-lucide="map"></i>
+        <span>Continue to Live Dashboard</span>
       </a>
 
       <!-- Error message area -->

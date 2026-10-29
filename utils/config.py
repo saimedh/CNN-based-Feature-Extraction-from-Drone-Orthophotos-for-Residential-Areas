@@ -20,8 +20,10 @@ class _Config(dict):
     def __getattr__(self, key: str) -> Any:
         try:
             value = self[key]
-            if isinstance(value, dict):
-                return _Config(value)
+            if isinstance(value, dict) and not isinstance(value, _Config):
+                wrapped = _Config(value)
+                self[key] = wrapped
+                return wrapped
             return value
         except KeyError:
             raise AttributeError(f"Config has no key '{key}'")

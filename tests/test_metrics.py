@@ -4,9 +4,15 @@ tests/test_metrics.py
 Unit tests for the SegmentationMetrics accumulator and batch_iou helper.
 """
 
+import numpy as np
 import pytest
 import torch
-from utils.metrics import SegmentationMetrics, batch_iou
+from utils.metrics import (
+    SegmentationMetrics,
+    batch_iou,
+    numpy_segmentation_metrics,
+    softmax_confidence_by_class,
+)
 
 
 class TestSegmentationMetrics:
@@ -87,3 +93,23 @@ class TestBatchIoU:
         logits[0, 1, :16, :] = 10.0
         iou = batch_iou(logits, targets, num_classes=C)
         assert abs(iou.item() - 1.0) < 0.01
+
+
+class TestNumpyMetrics:
+    def test_perfect_numpy_iou(self):
+        pred = np.zeros((16, 16), dtype=np.int64)
+        pred[4:12, 4:12] = 1
+        metrics = numpy_segmentation_metrics(
+            pred, pred.copy(), num_classes=4, class_names=["background", "building", "road", "vegetation"]
+        )
+        assert abs(metrics["mean_iou"] - 1.0) < 1e-4
+        assert metrics["per_class"]["building"]["iou"] == 1.0
+
+    def test_softmax_confidence_uses_argmax_pixels(self):
+        probs = np.zeros((4, 8, 8), dtype=np.float32)
+        probs[1, :, :] = 0.9
+        probs[0, :, :] = 0.1
+        conf = softmax_confidence_by_class(probs, ["background", "building", "road", "vegetation"])
+        assert conf["building"]["confidence"] == 0.9
+        assert conf["building"]["pixel_count"] == 64
+        assert conf["road"]["pixel_count"] == 0

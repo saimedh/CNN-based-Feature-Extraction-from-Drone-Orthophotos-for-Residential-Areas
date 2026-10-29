@@ -29,6 +29,7 @@ import rasterio
 from rasterio.transform import from_bounds
 from rasterio.windows import Window
 
+from preprocessing.image_enhancement import enhance_orthophoto_image
 from utils.config import load_config, _Config
 from utils.logger import get_logger
 
@@ -72,6 +73,7 @@ def tile_orthophoto(
     mask_path: Optional[str | Path] = None,
     output_mask_dir: Optional[str | Path] = None,
     cfg: Optional[_Config] = None,
+    enhance: bool = False,
 ) -> list[dict]:
     """
     Tile a GeoTIFF orthophoto (and optionally its paired mask) into overlapping
@@ -84,6 +86,7 @@ def tile_orthophoto(
     mask_path        : (Optional) Path to the paired single-band class mask GeoTIFF.
     output_mask_dir  : (Optional) Directory where mask tiles are written.
     cfg              : Loaded config.  Loaded from default location if ``None``.
+    enhance          : If True, apply radiometric & image enhancement (CLAHE, bilateral filter, shadow recovery).
 
     Returns
     -------
@@ -118,7 +121,7 @@ def tile_orthophoto(
             f"Tiling '{Path(orthophoto_path).name}' "
             f"({img_h}×{img_w} px) → "
             f"{num_rows}×{num_cols} = {num_rows * num_cols} tiles "
-            f"(tile={tile_size}, stride={stride})"
+            f"(tile={tile_size}, stride={stride}, enhance={enhance})"
         )
 
         mask_src = None
@@ -152,6 +155,15 @@ def tile_orthophoto(
 
                 # Pad to full tile_size if near-edge
                 img_patch = _pad_array(img_patch, tile_size, tile_size)
+
+                # Apply radiometric & image enhancement if enabled
+                if enhance and img_patch.shape[0] >= 3:
+                    # Transpose (C, H, W) -> (H, W, C)
+                    rgb_patch = np.transpose(img_patch[:3], (1, 2, 0))
+                    if rgb_patch.dtype != np.uint8:
+                        rgb_patch = np.clip(rgb_patch, 0, 255).astype(np.uint8)
+                    enhanced_rgb = enhance_orthophoto_image(rgb_patch, cfg=cfg)
+                    img_patch[:3] = np.transpose(enhanced_rgb, (2, 0, 1))
 
                 # Compute the affine transform for this tile
                 tile_transform = rasterio.windows.transform(win, src_transform)
@@ -222,6 +234,7 @@ def tile_folder(
     output_img_dir: str | Path = "data/tiles",
     output_mask_dir: Optional[str | Path] = "data/masks",
     cfg: Optional[_Config] = None,
+    enhance: bool = False,
 ) -> list[dict]:
     """
     Tile all GeoTIFF orthophotos in a folder, automatically pairing with
@@ -236,7 +249,7 @@ def tile_folder(
     orthos = sorted(set(orthos))
 
     all_tiles = []
-    logger.info(f"Tiling {len(orthos)} orthophotos in folder: {folder_path}")
+    logger.info(f"Tiling {len(orthos)} orthophotos in folder: {folder_path} (enhance={enhance})")
     for o in orthos:
         mask_path = None
         for m_ext in (".tif", ".tiff", ".TIF", ".TIFF"):
@@ -251,6 +264,7 @@ def tile_folder(
             mask_path=mask_path,
             output_mask_dir=output_mask_dir if mask_path else None,
             cfg=cfg,
+            enhance=enhance,
         )
         all_tiles.extend(tiles)
     return all_tiles
@@ -269,14 +283,16 @@ if __name__ == "__main__":
     parser.add_argument("--out-img", default="data/tiles", help="Output image tile dir")
     parser.add_argument("--out-mask", default="data/masks", help="Output mask tile dir")
     parser.add_argument("--config", default=None, help="Path to config YAML")
+    parser.add_argument("--enhance", action="store_true",
+                        help="Apply radiometric image enhancement (CLAHE, bilateral filter, shadow recovery) during tiling")
     args = parser.parse_args()
 
     cfg = load_config(args.config)
     input_path = Path(args.orthophoto)
     if input_path.is_dir():
-        info = tile_folder(input_path, args.out_img, args.out_mask, cfg)
+        info = tile_folder(input_path, args.out_img, args.out_mask, cfg, enhance=args.enhance)
     else:
-        info = tile_orthophoto(args.orthophoto, args.out_img, args.mask, args.out_mask, cfg)
+        info = tile_orthophoto(args.orthophoto, args.out_img, args.mask, args.out_mask, cfg, enhance=args.enhance)
 
     manifest_path = Path(args.out_img) / "tile_manifest.json"
     serialisable = [

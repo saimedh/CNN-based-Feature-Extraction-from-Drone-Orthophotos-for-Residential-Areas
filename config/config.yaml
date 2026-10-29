@@ -8,8 +8,8 @@
 # -----------------------------------------------------------
 paths:
   raw_orthophoto_dir: "data/raw"           # GeoTIFF input ortho photos
-  tiles_dir: "data/tiles"                  # image tiles (PNG/TIF)
-  masks_dir: "data/masks"                  # corresponding mask tiles
+  tiles_dir: "data/tiles/images"            # image tiles (PNG/TIF)
+  masks_dir: "data/tiles/masks"            # corresponding mask tiles
   processed_dir: "data/processed"          # cleaned / augmented data
   checkpoints_dir: "checkpoints"           # model checkpoint storage
   output_dir: "outputs"                    # GeoJSON / Shapefile results
@@ -36,6 +36,29 @@ dataset:
   val_split: 0.15
   test_split: 0.10
   random_seed: 42
+
+# -----------------------------------------------------------
+# Image Processing & Radiometric Enhancement
+# -----------------------------------------------------------
+image_processing:
+  enabled: true
+  clahe:
+    enabled: true
+    clip_limit: 2.0
+    tile_grid_size: [8, 8]
+  bilateral_filter:
+    enabled: true
+    d: 5
+    sigma_color: 50.0
+    sigma_space: 50.0
+  contrast_stretch:
+    enabled: true
+    lower_percentile: 2.0
+    upper_percentile: 98.0
+  shadow_reduction:
+    enabled: true
+    shadow_threshold: 45
+    boost_factor: 1.35
 
 # -----------------------------------------------------------
 # Augmentation (albumentations)
@@ -65,13 +88,13 @@ model:
 # Training
 # -----------------------------------------------------------
 training:
-  epochs: 50
-  batch_size: 16
-  num_workers: 4
+  epochs: 25
+  batch_size: 8
+  num_workers: 0
   learning_rate: 1.0e-4
   weight_decay: 1.0e-5
   scheduler: "cosine"            # cosine | step | plateau
-  mixed_precision: true          # fp16 training
+  mixed_precision: false         # disabled for CPU
   early_stopping_patience: 10
   save_top_k: 3                  # keep top-k checkpoints by val IoU
 

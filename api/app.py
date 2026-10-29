@@ -26,6 +26,7 @@ import json
 import os
 import shutil
 import tempfile
+import time
 import zipfile
 from pathlib import Path
 import sys
@@ -42,6 +43,10 @@ import uvicorn
 
 from inference.predict import predict, predict_folder
 from models import SegmentationModel
+from analysis.dataset_analysis import analyze_dataset, generate_sample_grid
+from analysis.prediction_analysis import analyze_predictions
+from analysis.multi_model_trainer import train_and_benchmark_multi_models, MODEL_SPECS
+from preprocessing.tiling import tile_orthophoto
 from utils.config import load_config
 from utils.logger import get_logger
 
@@ -78,24 +83,41 @@ _model: Optional[SegmentationModel] = None
 _checkpoint_path: Optional[str] = None
 
 DEFAULT_CHECKPOINT = str(Path(cfg.paths.checkpoints_dir) / "best.pt")
+DEMO_RUN_PREFIXES = ("demo",)
+
+
+def _is_demo_run(name: str) -> bool:
+    lowered = name.lower().replace("-", "_")
+    return lowered.startswith(DEMO_RUN_PREFIXES) or lowered in {
+        "demo_results",
+        "demo_run",
+        "demo_residential_ortho",
+    }
+
+
+def _resolve_checkpoint(checkpoint: str) -> Path:
+    path = Path(checkpoint)
+    if not path.is_absolute():
+        path = Path(__file__).resolve().parent.parent / path
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Trained checkpoint not found at '{path}'. "
+            "Train with `python training/train.py` or upload a .pt file to checkpoints/."
+        )
+    return path
 
 
 def _load_model(checkpoint: str) -> SegmentationModel:
     """Load and cache the model (re-uses the cached instance if same path)."""
     global _model, _checkpoint_path
-    if _model is None or checkpoint != _checkpoint_path:
+    resolved = str(_resolve_checkpoint(checkpoint))
+    if _model is None or resolved != _checkpoint_path:
         import torch
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         _model = SegmentationModel(cfg).to(device)
-        if Path(checkpoint).exists():
-            _model.load_checkpoint(checkpoint, device=device)
-            logger.info(f"Model loaded from {checkpoint}")
-        else:
-            logger.warning(
-                f"Checkpoint '{checkpoint}' not found. "
-                "Model will use random weights (for testing only)."
-            )
-        _checkpoint_path = checkpoint
+        _model.load_checkpoint(resolved, device=device)
+        logger.info(f"Model loaded from {resolved}")
+        _checkpoint_path = resolved
     return _model
 
 
@@ -144,10 +166,9 @@ async def serve_login():
 @app.get("/demo", include_in_schema=False)
 @app.get("/demo.html", include_in_schema=False)
 async def serve_demo():
-    demo_file = FRONTEND_DIR / "demo.html"
-    if demo_file.exists():
-        return FileResponse(str(demo_file))
-    raise HTTPException(status_code=404, detail="demo.html not found")
+    """Demo mode removed — redirect users directly to the live dashboard."""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/", status_code=302)
 
 
 @app.get("/dashboard", include_in_schema=False)
@@ -216,13 +237,15 @@ async def list_runs():
                     if gj_file.exists():
                         layers[cls] = f"/outputs/{p.name}/{cls}.geojson"
 
-                if layers:
+                if layers and not _is_demo_run(p.name):
                     runs.append({
                         "id": p.name,
                         "name": p.name.replace("_", " ").title(),
                         "layers": layers,
                         "summary": summary_data,
+                        "modified_at": p.stat().st_mtime,
                     })
+    runs.sort(key=lambda r: r.get("modified_at", 0), reverse=True)
     return {"runs": runs}
 
 
@@ -231,93 +254,91 @@ async def model_accuracy(
     run_id: str = Query(default="", description="Optional run ID to get accuracy for"),
 ):
     """
-    Return per-class prediction accuracy metrics: IoU, Dice, F1, confidence.
-    If a run_id with ground truth is available, metrics are computed from it.
-    Otherwise, returns model-estimated confidence based on feature properties.
-    """
-    import numpy as np
+    Return real accuracy metrics only.
 
+    Priority:
+    1. ``outputs/<run_id>/metrics.json`` written during inference (IoU if a
+       paired mask was present, otherwise softmax confidence).
+    2. ``outputs/evaluation_report.json`` from the labelled test split.
+    """
     base_dir = Path(__file__).resolve().parent.parent
     out_dir = base_dir / cfg.paths.output_dir
-    classes = ["building", "road", "vegetation"]
+    class_names = [c for c in cfg.dataset.classes if c != "background"]
 
-    # Try to load run-specific metrics first
     metrics_file = out_dir / run_id / "metrics.json" if run_id else None
     if metrics_file and metrics_file.exists():
-        try:
-            with open(metrics_file, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
+        with open(metrics_file, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        payload.setdefault("model_architecture", cfg.model.architecture)
+        payload.setdefault("encoder", cfg.model.encoder)
+        return payload
 
-    # Compute metrics from feature analysis
+    eval_file = out_dir / "evaluation_report.json"
+    if (not run_id) and eval_file.exists():
+        with open(eval_file, "r", encoding="utf-8") as f:
+            report = json.load(f)
+        all_classes = list(cfg.dataset.classes)
+        per_class = {}
+        for i, name in enumerate(all_classes):
+            if name == "background":
+                continue
+            per_class[name] = {
+                "iou": round(float(report["iou"][i]), 4) if i < len(report.get("iou", [])) else None,
+                "dice": round(float(report["dice"][i]), 4) if i < len(report.get("dice", [])) else None,
+                "f1": round(float(report["f1"][i]), 4) if i < len(report.get("f1", [])) else None,
+                "confidence": None,
+                "feature_count": 0,
+            }
+        return {
+            "run_id": "evaluation",
+            "has_ground_truth": True,
+            "metrics_source": "test_split_evaluation",
+            "per_class": per_class,
+            "mean_iou": round(float(report.get("mean_iou") or 0), 4),
+            "mean_dice": round(float(report.get("mean_dice") or 0), 4),
+            "mean_f1": round(float(report.get("mean_f1") or 0), 4),
+            "mean_confidence": None,
+            "total_features": 0,
+            "model_architecture": cfg.model.architecture,
+            "encoder": cfg.model.encoder,
+            "checkpoint": report.get("checkpoint"),
+            "split": report.get("split"),
+        }
+
     per_class = {}
     overall_features = 0
-
-    for cls in classes:
-        gj_path = None
+    for cls in class_names:
+        n = 0
         if run_id:
             gj_path = out_dir / run_id / f"{cls}.geojson"
-
-        if gj_path and gj_path.exists():
-            try:
+            if gj_path.exists():
                 with open(gj_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                features = data.get("features", [])
-                n = len(features)
-                overall_features += n
-
-                # Compute confidence from feature properties
-                areas = [f.get("properties", {}).get("area_sq_m", 0) for f in features]
-                avg_area = float(np.mean(areas)) if areas else 0
-                area_std = float(np.std(areas)) if areas else 0
-                cv = (area_std / avg_area) if avg_area > 0 else 1.0
-
-                # Heuristic confidence: fewer outliers and consistent areas = higher confidence
-                confidence = min(0.98, max(0.45, 1.0 - (cv * 0.3)))
-                # Estimate IoU, Dice, F1 from confidence with slight per-class variation
-                class_factor = {"building": 0.92, "road": 0.88, "vegetation": 0.90}
-                base_iou = confidence * class_factor.get(cls, 0.90)
-                dice = (2 * base_iou) / (1 + base_iou)
-
-                per_class[cls] = {
-                    "iou": round(base_iou, 4),
-                    "dice": round(dice, 4),
-                    "f1": round(dice, 4),
-                    "confidence": round(confidence, 4),
-                    "feature_count": n,
-                    "avg_area_m2": round(avg_area, 2),
-                    "area_std_m2": round(area_std, 2),
-                }
-            except Exception as e:
-                per_class[cls] = {
-                    "iou": 0, "dice": 0, "f1": 0,
-                    "confidence": 0, "feature_count": 0,
-                    "error": str(e),
-                }
-        else:
-            per_class[cls] = {
-                "iou": 0, "dice": 0, "f1": 0,
-                "confidence": 0, "feature_count": 0,
-            }
-
-    # Compute mean metrics
-    active = [v for v in per_class.values() if v["feature_count"] > 0]
-    mean_iou = float(np.mean([v["iou"] for v in active])) if active else 0
-    mean_dice = float(np.mean([v["dice"] for v in active])) if active else 0
-    mean_f1 = float(np.mean([v["f1"] for v in active])) if active else 0
-    mean_conf = float(np.mean([v["confidence"] for v in active])) if active else 0
+                    n = len(json.load(f).get("features", []))
+        overall_features += n
+        per_class[cls] = {
+            "iou": None,
+            "dice": None,
+            "f1": None,
+            "confidence": None,
+            "feature_count": n,
+        }
 
     return {
-        "run_id": run_id or "all",
-        "total_features": overall_features,
+        "run_id": run_id or "none",
+        "has_ground_truth": False,
+        "metrics_source": "unavailable",
         "per_class": per_class,
-        "mean_iou": round(mean_iou, 4),
-        "mean_dice": round(mean_dice, 4),
-        "mean_f1": round(mean_f1, 4),
-        "mean_confidence": round(mean_conf, 4),
+        "mean_iou": None,
+        "mean_dice": None,
+        "mean_f1": None,
+        "mean_confidence": None,
+        "total_features": overall_features,
         "model_architecture": cfg.model.architecture,
         "encoder": cfg.model.encoder,
+        "message": (
+            "No ground-truth mask or evaluation report found. "
+            "Upload a paired *_mask.tif with the orthophoto, or run evaluation/evaluate.py."
+        ),
     }
 
 
@@ -397,9 +418,462 @@ async def heatmap_data(
     }
 
 
+
+# ---------------------------------------------------------------------------
+# Analysis endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/analysis/dataset", tags=["Analysis"])
+async def dataset_analysis_endpoint(
+    img_dir: str = Query(default="", description="Image tiles directory (default: from config)"),
+    mask_dir: str = Query(default="", description="Mask tiles directory (default: from config)"),
+):
+    """
+    Run dataset analysis on the tiled image/mask dataset.
+    Returns class distribution, imbalance metrics, class weights, split summary,
+    and per-tile file details.
+    """
+    import os as _os
+    base_dir = Path(__file__).resolve().parent.parent
+    _img_dir = img_dir or _os.path.join(str(base_dir), cfg.paths.tiles_dir, "images")
+    _mask_dir = mask_dir or _os.path.join(str(base_dir), cfg.paths.tiles_dir, "masks")
+
+    # Resolve relative paths
+    _img_dir = str((base_dir / _img_dir).resolve()) if not Path(_img_dir).is_absolute() else _img_dir
+    _mask_dir = str((base_dir / _mask_dir).resolve()) if not Path(_mask_dir).is_absolute() else _mask_dir
+
+    out_dir = str(base_dir / cfg.paths.output_dir)
+
+    try:
+        report = analyze_dataset(
+            img_dir=_img_dir,
+            mask_dir=_mask_dir,
+            cfg=cfg,
+            output_dir=out_dir,
+        )
+        # Remove file_details from response to keep it lean (available in JSON file)
+        report.pop("file_details", None)
+        report.pop("chart_path", None)
+        return report
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        logger.exception("Dataset analysis failed")
+        raise HTTPException(status_code=500, detail=f"Dataset analysis failed: {exc}")
+
+
+@app.get("/analysis/dataset/chart", tags=["Analysis"])
+async def dataset_chart_endpoint():
+    """Return the dataset sample grid PNG image."""
+    base_dir = Path(__file__).resolve().parent.parent
+    chart_path = base_dir / cfg.paths.output_dir / "dataset_analysis_report.png"
+
+    if not chart_path.exists():
+        # Generate it on the fly
+        try:
+            _img_dir = str(base_dir / cfg.paths.tiles_dir / "images")
+            _mask_dir = str(base_dir / cfg.paths.tiles_dir / "masks")
+            generate_sample_grid(_img_dir, _mask_dir, chart_path)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Chart generation failed: {exc}")
+
+    if chart_path.exists():
+        return FileResponse(str(chart_path), media_type="image/png")
+    raise HTTPException(status_code=404, detail="Dataset chart not available.")
+
+
+@app.get("/analysis/prediction/{run_id}", tags=["Analysis"])
+async def prediction_analysis_endpoint(run_id: str):
+    """
+    Run prediction analysis on a completed inference run.
+    Returns per-class feature stats, land-use breakdown, building/road/vegetation
+    insights, and confidence distribution.
+    """
+    base_dir = Path(__file__).resolve().parent.parent
+    run_dir = base_dir / cfg.paths.output_dir / run_id
+
+    if not run_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found.")
+
+    try:
+        report = analyze_predictions(run_dir=run_dir, cfg=cfg)
+        report.pop("chart_path", None)
+        return report
+    except Exception as exc:
+        logger.exception("Prediction analysis failed")
+        raise HTTPException(status_code=500, detail=f"Prediction analysis failed: {exc}")
+
+
+@app.get("/analysis/prediction/{run_id}/chart", tags=["Analysis"])
+async def prediction_chart_endpoint(run_id: str):
+    """Return the prediction analysis chart PNG for a given run."""
+    base_dir = Path(__file__).resolve().parent.parent
+    chart_path = base_dir / cfg.paths.output_dir / run_id / "analysis_charts.png"
+
+    if not chart_path.exists():
+        # Generate on the fly
+        run_dir = base_dir / cfg.paths.output_dir / run_id
+        if not run_dir.is_dir():
+            raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found.")
+        try:
+            report = analyze_predictions(run_dir=run_dir, cfg=cfg)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Chart generation failed: {exc}")
+
+    if chart_path.exists():
+        return FileResponse(str(chart_path), media_type="image/png")
+    raise HTTPException(status_code=404, detail="Analysis chart not available.")
+
+
+@app.get("/analysis/compare", tags=["Analysis"])
+async def compare_runs_endpoint(
+    run_ids: str = Query(default="", description="Comma-separated run IDs to compare"),
+):
+    """
+    Compare prediction metrics across multiple runs.
+    Returns per-class stats side-by-side for each run.
+    """
+    base_dir = Path(__file__).resolve().parent.parent
+    out_dir = base_dir / cfg.paths.output_dir
+
+    # If no specific runs, compare all available
+    if run_ids:
+        ids = [r.strip() for r in run_ids.split(",") if r.strip()]
+    else:
+        ids = sorted([
+            d.name for d in out_dir.iterdir()
+            if d.is_dir()
+            and not _is_demo_run(d.name)
+            and any((d / f"{c}.geojson").exists() for c in ("building", "road", "vegetation"))
+        ]) if out_dir.is_dir() else []
+
+    if not ids:
+        return {"runs": [], "message": "No runs found to compare."}
+
+    comparison = []
+    for rid in ids:
+        run_dir = out_dir / rid
+        if not run_dir.is_dir():
+            continue
+        try:
+            report = analyze_predictions(run_dir=run_dir, cfg=cfg)
+            comparison.append({
+                "run_id": rid,
+                "total_features": report["total_features"],
+                "total_area_m2": report["total_mapped_area_m2"],
+                "per_class": {
+                    cls: {
+                        "count": report["per_class"][cls]["count"],
+                        "total_area_m2": report["per_class"][cls]["total_area_m2"],
+                        "mean_area_m2": report["per_class"][cls]["mean_area_m2"],
+                    }
+                    for cls in ("building", "road", "vegetation")
+                },
+                "land_use": report["land_use"],
+            })
+        except Exception as exc:
+            comparison.append({"run_id": rid, "error": str(exc)})
+
+    return {"runs": comparison, "count": len(comparison)}
+
+
+# ---------------------------------------------------------------------------
+# Multi-Model Training & Benchmark Accuracy endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/analysis/multi-model-accuracy", tags=["Analysis"])
+async def get_multi_model_accuracy():
+    """
+    Return the latest multi-model benchmark accuracy report across all architectures
+    (U-Net, DeepLabV3+, FPN, MAnet, PSPNet, Linknet).
+    """
+    base_dir = Path(__file__).resolve().parent.parent
+    report_file = base_dir / cfg.paths.output_dir / "multi_model_accuracy_report.json"
+
+    if report_file.exists():
+        try:
+            with open(report_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+
+    raise HTTPException(
+        status_code=404,
+        detail="No multi-model accuracy report yet. Train models from the Analysis tab first.",
+    )
+
+
+@app.post("/analysis/train-multi-model", tags=["Analysis"])
+async def train_multi_model_endpoint(
+    models: str = Query(default="unet,deeplabv3plus,fpn,manet,pspnet,linknet", description="Comma-separated architecture keys"),
+    epochs: int = Query(default=3, ge=1, le=50, description="Training epochs per model"),
+    lr: float = Query(default=1e-4, description="Learning rate"),
+    batch_size: int = Query(default=4, ge=1, le=32, description="Batch size"),
+):
+    """
+    Train and benchmark multiple model architectures on the dataset and compare their accuracy.
+    """
+    model_keys = [m.strip().lower() for m in models.split(",") if m.strip()]
+    if not model_keys:
+        model_keys = ["unet", "deeplabv3plus", "fpn", "manet", "pspnet", "linknet"]
+
+    try:
+        report = train_and_benchmark_multi_models(
+            model_keys=model_keys,
+            epochs=epochs,
+            lr=lr,
+            batch_size=batch_size,
+            cfg=cfg,
+        )
+        return report
+    except Exception as exc:
+        logger.exception("Multi-model training failed")
+        raise HTTPException(status_code=500, detail=f"Multi-model training failed: {exc}")
+
+
+@app.get("/analysis/multi-model-chart", tags=["Analysis"])
+async def multi_model_chart_endpoint():
+    """Return the multi-model comparison bar chart PNG image."""
+    base_dir = Path(__file__).resolve().parent.parent
+    chart_path = base_dir / cfg.paths.output_dir / "multi_model_accuracy_chart.png"
+
+    if not chart_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="No multi-model chart yet. Train models from the Analysis tab first.",
+        )
+
+    if chart_path.exists():
+        return FileResponse(str(chart_path), media_type="image/png")
+    raise HTTPException(status_code=404, detail="Multi-model chart not available.")
+
+
+# ---------------------------------------------------------------------------
+# Data Resources & Ingestion endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/analysis/resources", tags=["Analysis"])
+async def list_data_resources():
+    """
+    List all local and benchmark data resources in the workspace.
+    Includes raw orthophotos, paired masks, pre-tiled image/mask datasets, and model checkpoints.
+    """
+    base_dir = Path(__file__).resolve().parent.parent
+    raw_dir = base_dir / cfg.paths.raw_orthophoto_dir
+    tiles_img_dir = base_dir / cfg.paths.tiles_dir / "images"
+    tiles_mask_dir = base_dir / cfg.paths.tiles_dir / "masks"
+    uavid_dir = base_dir / "data" / "uavid"
+    checkpoints_dir = base_dir / cfg.paths.checkpoints_dir
+
+    resources = []
+
+    # 1. Raw Orthophotos and Masks
+    if raw_dir.is_dir():
+        for p in sorted(raw_dir.glob("*.*")):
+            if p.suffix.lower() in [".tif", ".tiff", ".png", ".jpg", ".jpeg"]:
+                is_mask = "_mask" in p.stem.lower()
+                stat = p.stat()
+                resources.append({
+                    "name": p.name,
+                    "category": "Ground Truth Mask" if is_mask else "Raw Orthophoto",
+                    "type": "raster",
+                    "path": f"data/raw/{p.name}",
+                    "size_bytes": stat.st_size,
+                    "size_mb": round(stat.st_size / (1024 * 1024), 2),
+                    "is_mask": is_mask,
+                    "modified_at": stat.st_mtime,
+                })
+
+    # 2. Tiled Datasets
+    tile_img_count = len(list(tiles_img_dir.glob("*.tif"))) if tiles_img_dir.is_dir() else 0
+    tile_mask_count = len(list(tiles_mask_dir.glob("*.tif"))) if tiles_mask_dir.is_dir() else 0
+    if tile_img_count > 0:
+        total_tile_bytes = sum(f.stat().st_size for f in tiles_img_dir.glob("*.tif"))
+        resources.append({
+            "name": "Standard Tiled Dataset (256x256)",
+            "category": "Tiled Training Set",
+            "type": "dataset",
+            "path": f"data/tiles",
+            "size_bytes": total_tile_bytes,
+            "size_mb": round(total_tile_bytes / (1024 * 1024), 2),
+            "tile_count": tile_img_count,
+            "mask_count": tile_mask_count,
+            "is_paired": tile_img_count == tile_mask_count,
+        })
+
+    # 3. UAVid Benchmark Split
+    if uavid_dir.is_dir():
+        uavid_files = list(uavid_dir.rglob("*.png")) + list(uavid_dir.rglob("*.jpg"))
+        if uavid_files:
+            total_uavid_bytes = sum(f.stat().st_size for f in uavid_files)
+            resources.append({
+                "name": "UAVid Benchmark Dataset",
+                "category": "Public Benchmark Split",
+                "type": "dataset",
+                "path": "data/uavid",
+                "size_bytes": total_uavid_bytes,
+                "size_mb": round(total_uavid_bytes / (1024 * 1024), 2),
+                "tile_count": len(uavid_files),
+                "is_paired": True,
+            })
+
+    # 4. Checkpoints
+    if checkpoints_dir.is_dir():
+        for cp in sorted(checkpoints_dir.glob("*.pt")):
+            stat = cp.stat()
+            resources.append({
+                "name": cp.name,
+                "category": "Model Checkpoint",
+                "type": "model",
+                "path": f"checkpoints/{cp.name}",
+                "size_bytes": stat.st_size,
+                "size_mb": round(stat.st_size / (1024 * 1024), 2),
+                "modified_at": stat.st_mtime,
+            })
+
+    return {
+        "total_resources": len(resources),
+        "resources": resources,
+        "raw_dir": str(raw_dir),
+        "tiles_dir": str(tiles_img_dir.parent),
+    }
+
+
+@app.post("/analysis/upload-resource", tags=["Analysis"])
+async def upload_data_resource(
+    file: UploadFile = File(..., description="Orthophoto GeoTIFF, Mask, or dataset ZIP"),
+    mask_file: Optional[UploadFile] = File(None, description="Optional paired mask GeoTIFF/PNG"),
+    resource_type: str = Query(default="raw_ortho", description="Type: 'raw_ortho' or 'dataset_zip'"),
+):
+    """
+    Upload a new data resource (Orthophoto, Mask, or ZIP dataset archive) to the project.
+    """
+    base_dir = Path(__file__).resolve().parent.parent
+    raw_dir = base_dir / cfg.paths.raw_orthophoto_dir
+    tiles_dir = base_dir / cfg.paths.tiles_dir
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    tiles_dir.mkdir(parents=True, exist_ok=True)
+
+    filename = file.filename or "upload_resource.tif"
+    content = await file.read()
+
+    uploaded_items = []
+
+    if resource_type == "dataset_zip" or filename.lower().endswith(".zip"):
+        # Extract zip directly into tiles directory or raw directory
+        zip_buf = io.BytesIO(content)
+        with zipfile.ZipFile(zip_buf, "r") as zf:
+            zf.extractall(tiles_dir)
+            extracted_names = zf.namelist()
+        return {
+            "status": "success",
+            "message": f"Extracted ZIP archive '{filename}' with {len(extracted_names)} files into data/tiles/.",
+            "type": "dataset_zip",
+            "files_count": len(extracted_names),
+        }
+    else:
+        # Save raw orthophoto file
+        dest_path = raw_dir / filename
+        with open(dest_path, "wb") as f_out:
+            f_out.write(content)
+        uploaded_items.append(filename)
+
+        # Save paired mask if provided
+        if mask_file and mask_file.filename:
+            mask_filename = mask_file.filename
+            mask_content = await mask_file.read()
+            mask_dest = raw_dir / mask_filename
+            with open(mask_dest, "wb") as mf_out:
+                mf_out.write(mask_content)
+            uploaded_items.append(mask_filename)
+
+        return {
+            "status": "success",
+            "message": f"Uploaded {len(uploaded_items)} file(s) to data/raw/ successfully.",
+            "uploaded_files": uploaded_items,
+            "destination": str(raw_dir),
+        }
+
+
+@app.post("/analysis/tile-resource", tags=["Analysis"])
+async def tile_data_resource(
+    ortho_name: str = Query(..., description="Name of the raw orthophoto file in data/raw/"),
+    mask_name: Optional[str] = Query(default=None, description="Optional mask file name in data/raw/"),
+    tile_size: int = Query(default=256, description="Tile dimension in pixels (e.g., 256, 512)"),
+    overlap: float = Query(default=0.15, description="Fractional overlap between tiles (0.0 - 0.5)"),
+    min_valid_ratio: float = Query(default=0.3, description="Minimum fraction of non-nodata pixels"),
+):
+    """
+    Run tiling on a selected raw orthophoto and paired mask from data/raw/.
+    Populates data/tiles/images and data/tiles/masks.
+    """
+    base_dir = Path(__file__).resolve().parent.parent
+    raw_dir = base_dir / cfg.paths.raw_orthophoto_dir
+    ortho_path = raw_dir / ortho_name
+
+    if not ortho_path.exists():
+        raise HTTPException(status_code=404, detail=f"Orthophoto '{ortho_name}' not found in data/raw/.")
+
+    mask_path = None
+    if mask_name:
+        mask_p = raw_dir / mask_name
+        if mask_p.exists():
+            mask_path = mask_p
+    else:
+        # Auto-detect paired mask
+        for ext in (".tif", ".tiff", ".png"):
+            candidate = raw_dir / f"{ortho_path.stem}_mask{ext}"
+            if candidate.exists():
+                mask_path = candidate
+                break
+
+    out_img_dir = base_dir / cfg.paths.tiles_dir / "images"
+    out_mask_dir = (base_dir / cfg.paths.tiles_dir / "masks") if mask_path else None
+
+    # Clone config with custom tiling parameters
+    custom_cfg = cfg
+    custom_cfg.tiling.tile_size = tile_size
+    custom_cfg.tiling.overlap = overlap
+    custom_cfg.tiling.min_valid_ratio = min_valid_ratio
+
+    try:
+        tiles = tile_orthophoto(
+            orthophoto_path=ortho_path,
+            output_img_dir=out_img_dir,
+            mask_path=mask_path,
+            output_mask_dir=out_mask_dir,
+            cfg=custom_cfg,
+        )
+        return {
+            "status": "success",
+            "message": f"Successfully generated {len(tiles)} valid tiles from '{ortho_name}'.",
+            "total_tiles": len(tiles),
+            "tile_size": tile_size,
+            "overlap": overlap,
+            "has_mask": mask_path is not None,
+            "output_img_dir": str(out_img_dir),
+            "output_mask_dir": str(out_mask_dir) if out_mask_dir else None,
+        }
+    except Exception as exc:
+        logger.exception("Tiling failed")
+        raise HTTPException(status_code=500, detail=f"Tiling execution failed: {exc}")
+
+
+@app.delete("/analysis/resources/{filename}", tags=["Analysis"])
+async def delete_data_resource(filename: str):
+    """Delete a raw data resource or checkpoint file."""
+    base_dir = Path(__file__).resolve().parent.parent
+    raw_path = base_dir / cfg.paths.raw_orthophoto_dir / filename
+    if raw_path.exists() and raw_path.is_file():
+        raw_path.unlink()
+        return {"status": "success", "message": f"Deleted file '{filename}'."}
+    raise HTTPException(status_code=404, detail=f"File '{filename}' not found.")
+
+
 @app.post("/predict", tags=["Inference"])
 async def predict_endpoint(
     file: UploadFile = File(..., description="GeoTIFF orthophoto to segment"),
+    mask: Optional[UploadFile] = File(None, description="Optional ground-truth mask for real IoU/Dice"),
     checkpoint: str = Query(default=DEFAULT_CHECKPOINT, description="Path to model checkpoint"),
     save_prob_tif: bool = Query(default=False, description="Include probability GeoTIFF in response"),
     regularize: bool = Query(default=True, description="Apply 90-degree corner regularization to buildings"),
@@ -414,9 +888,11 @@ async def predict_endpoint(
 
     Returns a `application/zip` stream containing one `.geojson` per class.
     """
-    filename = file.filename or "upload"
+    filename = file.filename or "upload.tif"
+    run_id = "".join(c if (c.isalnum() or c in "-_") else "_" for c in Path(filename).stem)
+    if not run_id or _is_demo_run(run_id):
+        run_id = f"run_{int(time.time())}"
 
-    # Size guard
     max_bytes = int(cfg.api.max_file_size_mb) * 1024 * 1024
     content = await file.read()
     if len(content) > max_bytes:
@@ -425,53 +901,78 @@ async def predict_endpoint(
             detail=f"File too large. Maximum size is {cfg.api.max_file_size_mb} MB.",
         )
 
+    base_dir = Path(__file__).resolve().parent.parent
+    persist_dir = base_dir / cfg.paths.output_dir / run_id
+    persist_dir.mkdir(parents=True, exist_ok=True)
+    raw_dir = base_dir / cfg.paths.raw_orthophoto_dir
+    raw_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        resolved_ckpt = str(_resolve_checkpoint(checkpoint))
+        _load_model(resolved_ckpt)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Model loading failed: {exc}")
+
     with tempfile.TemporaryDirectory(prefix="api_predict_") as tmp:
-        # Write upload to disk
         ortho_path = Path(tmp) / filename
         with open(ortho_path, "wb") as f:
             f.write(content)
+        with open(raw_dir / filename, "wb") as f:
+            f.write(content)
 
-        output_dir = Path(tmp) / "outputs"
-        output_dir.mkdir()
+        mask_path = None
+        if mask and mask.filename:
+            mask_bytes = await mask.read()
+            mask_name = mask.filename
+            mask_path = Path(tmp) / mask_name
+            with open(mask_path, "wb") as mf:
+                mf.write(mask_bytes)
+            with open(raw_dir / mask_name, "wb") as mf:
+                mf.write(mask_bytes)
 
-        # Ensure model is loaded
-        try:
-            _load_model(checkpoint)
-        except Exception as exc:
-            raise HTTPException(status_code=500, detail=f"Model loading failed: {exc}")
-
-        # Run prediction
         try:
             geojson_paths = predict(
                 orthophoto_path=ortho_path,
-                checkpoint_path=checkpoint,
-                output_dir=output_dir,
+                checkpoint_path=resolved_ckpt,
+                output_dir=persist_dir,
                 save_prob_tif=save_prob_tif,
                 regularize_buildings=regularize,
+                mask_path=mask_path,
             )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=503, detail=str(exc))
         except Exception as exc:
             logger.exception("Prediction failed")
             raise HTTPException(status_code=500, detail=f"Prediction failed: {exc}")
 
-        # Package results into a ZIP in memory
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
             for class_name, path in geojson_paths.items():
                 zf.write(path, arcname=path.name)
-
-            # Include a summary JSON
-            summary = {
-                "source_file": filename,
-                "classes": list(geojson_paths.keys()),
-                "files": [p.name for p in geojson_paths.values()],
-            }
-            zf.writestr("summary.json", json.dumps(summary, indent=2))
+            metrics_file = persist_dir / "metrics.json"
+            if metrics_file.exists():
+                zf.write(metrics_file, arcname="metrics.json")
+            summary_file = persist_dir / "summary.json"
+            if summary_file.exists():
+                zf.write(summary_file, arcname="summary.json")
+            else:
+                zf.writestr("summary.json", json.dumps({
+                    "source_file": filename,
+                    "run_id": run_id,
+                    "classes": list(geojson_paths.keys()),
+                    "files": [p.name for p in geojson_paths.values()],
+                }, indent=2))
 
         zip_buffer.seek(0)
         return StreamingResponse(
             zip_buffer,
             media_type="application/zip",
-            headers={"Content-Disposition": f'attachment; filename="{Path(filename).stem}_features.zip"'},
+            headers={
+                "Content-Disposition": f'attachment; filename="{run_id}_features.zip"',
+                "X-Run-Id": run_id,
+            },
         )
 
 
@@ -553,7 +1054,10 @@ async def predict_batch_endpoint(
     max_bytes = int(cfg.api.max_file_size_mb) * 1024 * 1024
 
     try:
+        checkpoint = str(_resolve_checkpoint(checkpoint))
         _load_model(checkpoint)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Model loading failed: {exc}")
 
@@ -638,7 +1142,10 @@ async def predict_folder_endpoint(
     target_out.mkdir(parents=True, exist_ok=True)
 
     try:
+        checkpoint = str(_resolve_checkpoint(checkpoint))
         _load_model(checkpoint)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Model loading failed: {exc}")
 
@@ -670,7 +1177,25 @@ async def predict_folder_endpoint(
     }
 
 
-# Mount static UI and outputs directory
+@app.get("/data/download-bundle", tags=["Analysis"])
+async def download_dataset_bundle():
+    """Download the complete packaged dataset bundle as a ZIP file."""
+    base_dir = Path(__file__).resolve().parent.parent
+    zip_path = base_dir / "data" / "dataset_bundle.zip"
+    if zip_path.exists():
+        return FileResponse(
+            str(zip_path),
+            media_type="application/zip",
+            filename="drone_feature_extraction_dataset.zip",
+        )
+    raise HTTPException(status_code=404, detail="dataset_bundle.zip not found.")
+
+
+# Mount static UI, outputs, and data directory
+data_dir = Path(__file__).resolve().parent.parent / "data"
+data_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/data", StaticFiles(directory=str(data_dir)), name="data_static")
+
 if FRONTEND_DIR.is_dir():
     app.mount("/ui", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="ui")
     app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
@@ -688,10 +1213,12 @@ if FRONTEND_DIR.is_dir():
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
+    port = int(os.environ.get("PORT", cfg.api.port))
+    host = os.environ.get("HOST", cfg.api.host)
     uvicorn.run(
         "api.app:app",
-        host=cfg.api.host,
-        port=int(cfg.api.port),
+        host=host,
+        port=port,
         reload=False,
         log_level="info",
     )

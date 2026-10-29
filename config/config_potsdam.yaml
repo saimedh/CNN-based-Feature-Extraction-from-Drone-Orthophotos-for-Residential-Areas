@@ -1,0 +1,124 @@
+# ============================================================
+# CNN-based Feature Extraction from Drone Orthophotos
+# Configuration for ISPRS Potsdam Dataset
+# ============================================================
+#
+# This config targets the ISPRS Potsdam 2D benchmark.
+#
+# The default 4-class remapping collapses Potsdam's native 6 classes
+# into: background(0), building(1), road(2), vegetation(3).
+# To use all 6 native classes, set dataset.num_classes to 6 and
+# update model.num_classes accordingly.
+# ============================================================
+
+# -----------------------------------------------------------
+# Paths
+# -----------------------------------------------------------
+paths:
+  raw_orthophoto_dir: "data/potsdam/raw"       # Raw Potsdam TOP patches
+  tiles_dir: "data/tiles/images"               # Image tiles (from potsdam_adapter)
+  masks_dir: "data/tiles/masks"                # Mask tiles  (from potsdam_adapter)
+  processed_dir: "data/processed"
+  checkpoints_dir: "checkpoints/potsdam"
+  output_dir: "outputs/potsdam"
+  logs_dir: "logs/potsdam"
+
+# -----------------------------------------------------------
+# Dataset selector
+# -----------------------------------------------------------
+dataset_source:
+  name: "potsdam"                              # potsdam | uavid | custom
+  remap: "4class"                              # 4class | 6class (Potsdam only)
+
+# -----------------------------------------------------------
+# Tiling (used by potsdam_adapter.py tile)
+# -----------------------------------------------------------
+tiling:
+  tile_size: 256
+  overlap: 0.15
+  min_valid_ratio: 0.3
+
+# -----------------------------------------------------------
+# Dataset / Classes (4-class remapped from Potsdam's 6)
+# -----------------------------------------------------------
+dataset:
+  classes:
+    - background    # 0  (Potsdam: clutter + car)
+    - building      # 1  (Potsdam: building)
+    - road          # 2  (Potsdam: impervious surfaces)
+    - vegetation    # 3  (Potsdam: low vegetation + tree)
+  num_classes: 4
+  val_split: 0.15
+  test_split: 0.10
+  random_seed: 42
+
+# -----------------------------------------------------------
+# Augmentation (albumentations)
+# -----------------------------------------------------------
+augmentation:
+  horizontal_flip: true
+  vertical_flip: true
+  rotate_limit: 45
+  color_jitter:
+    brightness: 0.2
+    contrast: 0.2
+    saturation: 0.2
+    hue: 0.05
+  random_crop_size: 224
+
+# -----------------------------------------------------------
+# Model
+# -----------------------------------------------------------
+model:
+  architecture: "unet"
+  encoder: "resnet34"
+  encoder_weights: "imagenet"
+  in_channels: 3
+  num_classes: 4
+
+# -----------------------------------------------------------
+# Training
+# -----------------------------------------------------------
+training:
+  epochs: 50
+  batch_size: 16
+  num_workers: 4
+  learning_rate: 1.0e-4
+  weight_decay: 1.0e-5
+  scheduler: "cosine"
+  mixed_precision: true
+  early_stopping_patience: 10
+  save_top_k: 3
+
+  loss:
+    dice_weight: 0.5
+    bce_weight: 0.5
+
+# -----------------------------------------------------------
+# Postprocessing
+# -----------------------------------------------------------
+postprocessing:
+  binary_threshold: 0.5
+  morph_kernel_size: 3
+  morph_iterations: 2
+  min_polygon_area: 25
+  douglas_peucker_tolerance: 1.0
+  merge_overlap_strategy: "average"
+
+# -----------------------------------------------------------
+# Evaluation
+# -----------------------------------------------------------
+evaluation:
+  metrics:
+    - iou
+    - dice
+    - f1
+  smooth: 1.0e-6
+
+# -----------------------------------------------------------
+# API (FastAPI)
+# -----------------------------------------------------------
+api:
+  host: "0.0.0.0"
+  port: 8000
+  max_file_size_mb: 500

@@ -31,7 +31,8 @@ from typing import Optional
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import torch
-from torch.cuda.amp import GradScaler, autocast
+from torch.amp import autocast
+from torch.cuda.amp import GradScaler
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
@@ -107,7 +108,7 @@ def _train_epoch(
 
         optimizer.zero_grad(set_to_none=True)
 
-        with autocast(enabled=cfg.training.mixed_precision):
+        with autocast(device_type=str(device).split(':')[0], enabled=cfg.training.mixed_precision):
             logits = model(images)
             loss = loss_fn(logits, masks)
 
@@ -145,7 +146,7 @@ def _val_epoch(
         images = batch["image"].to(device, non_blocking=True)
         masks = batch["mask"].to(device, non_blocking=True)
 
-        with autocast(enabled=cfg.training.mixed_precision):
+        with autocast(device_type=str(device).split(':')[0], enabled=cfg.training.mixed_precision):
             logits = model(images)
             loss = loss_fn(logits, masks)
 

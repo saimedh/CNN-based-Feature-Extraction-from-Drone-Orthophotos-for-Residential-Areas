@@ -29,7 +29,7 @@ from typing import Optional
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import torch
-from torch.cuda.amp import autocast
+from torch.amp import autocast
 
 from models import SegmentationModel
 from preprocessing.dataset import build_dataloaders
@@ -90,7 +90,7 @@ def evaluate(
         images = batch["image"].to(device, non_blocking=True)
         masks = batch["mask"].to(device, non_blocking=True)
 
-        with autocast(enabled=cfg.training.mixed_precision):
+        with autocast(device_type=str(device).split(':')[0], enabled=cfg.training.mixed_precision):
             logits = model(images)
 
         metrics.update(logits.float(), masks)
@@ -128,7 +128,7 @@ def evaluate(
 
 def _print_results(results: dict, class_names: list[str]) -> None:
     """Print a formatted table to the console."""
-    sep = "─" * 60
+    sep = "-" * 60
     print(f"\n{sep}")
     print(f"{'Class':<20} {'IoU':>8}  {'Dice':>8}  {'F1':>8}")
     print(sep)
@@ -156,7 +156,7 @@ def _save_txt_report(results: dict, class_names: list[str], path: Path) -> None:
         f"Elapsed:    {results.get('elapsed_seconds', 0):.1f}s",
         "",
         f"{'Class':<20} {'IoU':>8}  {'Dice':>8}  {'F1':>8}",
-        "─" * 60,
+        "-" * 60,
     ]
     for i, name in enumerate(class_names):
         lines.append(
@@ -166,7 +166,7 @@ def _save_txt_report(results: dict, class_names: list[str], path: Path) -> None:
             f"{results['f1'][i]:>8.4f}"
         )
     lines += [
-        "─" * 60,
+        "-" * 60,
         f"{'Mean':<20} "
         f"{results['mean_iou']:>8.4f}  "
         f"{results['mean_dice']:>8.4f}  "

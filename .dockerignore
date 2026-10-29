@@ -1,0 +1,42 @@
+# Git
+.git/
+.gitignore
+
+# Python virtual environment & cache
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Tests and logs
+.pytest_cache/
+.coverage
+htmlcov/
+logs/
+*.log
+
+# Large datasets and checkpoint binaries
+data/
+train/
+valid/
+checkpoints/
+UAVidToolKit/
+
+# Output directories & scratch
+outputs/*.zip
+outputs/**/*.zip
+outputs/run_*/
+outputs/test_*/
+outputs/aukerman_*/
+outputs/image_part_*/
+outputs/6ad0977ffa5574160039dbe6/
+scratch/
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
