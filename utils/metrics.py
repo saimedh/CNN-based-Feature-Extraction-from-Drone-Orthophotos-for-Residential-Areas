@@ -95,6 +95,10 @@ class SegmentationMetrics:
         # F1 == Dice for binary-equivalent per-class evaluation
         f1 = dice
 
+        total_px = float(self._target_sum.sum().item())
+        correct = float(self._intersection.sum().item())
+        pixel_accuracy = (correct / total_px) if total_px > 0 else 0.0
+
         return {
             "iou": iou,
             "dice": dice,
@@ -102,6 +106,7 @@ class SegmentationMetrics:
             "mean_iou": float(sum(iou) / len(iou)),
             "mean_dice": float(sum(dice) / len(dice)),
             "mean_f1": float(sum(f1) / len(f1)),
+            "pixel_accuracy": float(pixel_accuracy),
         }
 
 

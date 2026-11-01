@@ -155,24 +155,6 @@
           </div>
         </div>
 
-        <!-- Benchmark Sample Selector -->
-        <div class="quick-sample-bar" style="margin-top:10px;padding:8px 10px;background:rgba(56,189,248,0.06);border:1px dashed rgba(56,189,248,0.25);border-radius:8px;">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:6px;">
-            <span style="font-size:0.73rem;font-weight:600;color:var(--accent-primary);display:flex;align-items:center;gap:4px;">
-              <i data-lucide="satellite" style="width:13px;height:13px;"></i> Benchmark Orthophotos
-            </span>
-            <span style="font-size:0.68rem;color:var(--text-muted);">Click to load</span>
-          </div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            <button type="button" class="btn-text-xs" style="background:rgba(255,255,255,0.05);padding:4px 8px;border-radius:4px;border:1px solid var(--border);color:var(--text-primary);cursor:pointer;font-size:0.72rem;" onclick="loadSampleOrthophoto('odm_aukerman_orthophoto.tif')">
-              ODM Aukerman (Ohio)
-            </button>
-            <button type="button" class="btn-text-xs" style="background:rgba(255,255,255,0.05);padding:4px 8px;border-radius:4px;border:1px solid var(--border);color:var(--text-primary);cursor:pointer;font-size:0.72rem;" onclick="loadSampleOrthophoto('6ad0977ffa5574160039dbe6.tif')">
-              Potsdam Ortho (Tile)
-            </button>
-          </div>
-        </div>
-
         <div class="api-input-row" style="margin-top:10px;">
           <label class="input-label">Optional ground-truth mask (for IoU / Dice)</label>
           <input class="input-field" type="file" id="mask-input" accept=".tif,.tiff,.png,.jpg,.jpeg" />
@@ -791,14 +773,15 @@
 
     <!-- Benchmark Table -->
     <div class="models-section">
-      <h2 class="ms-title"><i data-lucide="bar-chart-3" style="width:18px;height:18px;"></i> Benchmark Comparison: Existing Literature vs. Proposed Architecture</h2>
+      <h2 class="ms-title"><i data-lucide="bar-chart-3" style="width:18px;height:18px;"></i> Live Accuracy (this checkpoint / last train run)</h2>
+      <p style="font-size:0.75rem;color:var(--text-muted);margin:0 0 10px;">IoU and F1 from evaluation report or tiled-dataset training. No canned scores.</p>
       <div class="benchmark-table-wrap">
         <table class="benchmark-table">
           <thead>
             <tr>
               <th>Model / Architecture</th>
-              <th>Baseline / Paper</th>
-              <th>Dataset</th>
+              <th>Source</th>
+              <th>Dataset / split</th>
               <th>mIoU</th>
               <th>Building IoU</th>
               <th>Road IoU</th>
@@ -807,95 +790,8 @@
               <th>Speed (FPS)</th>
             </tr>
           </thead>
-          <tbody>
-            <tr class="bt-highlight" style="background: rgba(99,102,241,0.16); border-left: 3px solid #6366f1;">
-              <td><strong>OrthoSeg (DeepLabV3+ ResNet50)</strong> ⭐</td>
-              <td>Proposed (This Work)</td>
-              <td>UAVid + ODM Multi-Site</td>
-              <td><strong>76.8%</strong></td>
-              <td><strong>83.4%</strong></td>
-              <td><strong>70.2%</strong></td>
-              <td><strong>74.6%</strong></td>
-              <td><strong>86.9%</strong></td>
-              <td>31 fps</td>
-            </tr>
-            <tr class="bt-highlight">
-              <td><strong>OrthoSeg (U-Net ResNet34)</strong> ✅</td>
-              <td>Proposed (This Work)</td>
-              <td>ODM Aukerman</td>
-              <td><strong>73.2%</strong></td>
-              <td><strong>80.6%</strong></td>
-              <td>65.8%</td>
-              <td>63.0%</td>
-              <td><strong>84.5%</strong></td>
-              <td>42 fps</td>
-            </tr>
-            <tr>
-              <td>MAnet (Attention)</td>
-              <td>Fan et al. (2020)</td>
-              <td>ISPRS Vaihingen</td>
-              <td>74.1%</td>
-              <td>81.5%</td>
-              <td>67.3%</td>
-              <td>71.2%</td>
-              <td>84.8%</td>
-              <td>21 fps</td>
-            </tr>
-            <tr>
-              <td>U-Net (Standard)</td>
-              <td>Ronneberger (2015)</td>
-              <td>ISPRS Vaihingen</td>
-              <td>71.5%</td>
-              <td>78.2%</td>
-              <td>62.4%</td>
-              <td>68.1%</td>
-              <td>82.9%</td>
-              <td>45 fps</td>
-            </tr>
-            <tr>
-              <td>PSPNet</td>
-              <td>Zhao et al. (2017)</td>
-              <td>UAVid Benchmark</td>
-              <td>68.5%</td>
-              <td>74.0%</td>
-              <td>63.2%</td>
-              <td>70.5%</td>
-              <td>81.0%</td>
-              <td>28 fps</td>
-            </tr>
-            <tr>
-              <td>DeepLabV3+ (ResNet50)</td>
-              <td>Chen et al. (2018)</td>
-              <td>UAVid Benchmark</td>
-              <td>67.0%</td>
-              <td>75.1%</td>
-              <td>65.8%</td>
-              <td>72.3%</td>
-              <td>80.1%</td>
-              <td>24 fps</td>
-            </tr>
-            <tr>
-              <td>SegNet</td>
-              <td>Badrinarayanan (2017)</td>
-              <td>ISPRS Potsdam</td>
-              <td>65.3%</td>
-              <td>72.0%</td>
-              <td>58.7%</td>
-              <td>64.2%</td>
-              <td>78.4%</td>
-              <td>32 fps</td>
-            </tr>
-            <tr>
-              <td>FCN-8s</td>
-              <td>Long et al. (2015)</td>
-              <td>Cityscapes / UAVid</td>
-              <td>58.4%</td>
-              <td>66.2%</td>
-              <td>58.1%</td>
-              <td>57.4%</td>
-              <td>72.8%</td>
-              <td>38 fps</td>
-            </tr>
+          <tbody id="live-benchmark-tbody">
+            <tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:16px;">Loading live accuracy...</td></tr>
           </tbody>
         </table>
       </div>
@@ -1117,6 +1013,9 @@
       </button>
       <button class="analysis-subtab" id="subtab-resources" onclick="switchAnalysisSubtab('resources')">
         <i data-lucide="upload-cloud" style="width:15px;height:15px;"></i> Upload &amp; Data Resources
+      </button>
+      <button class="analysis-subtab" id="subtab-benchmarks" onclick="switchAnalysisSubtab('benchmarks')">
+        <i data-lucide="globe" style="width:15px;height:15px;"></i> Benchmark Datasets
       </button>
     </div>
 
@@ -1427,6 +1326,120 @@
           </table>
         </div>
       </div>
+
+    </div>
+
+    <!-- BENCHMARK DATASETS & OUTPUTS CATALOG PANEL -->
+    <div id="analysis-benchmarks-panel" style="display:none;">
+
+      <!-- Top Action Bar -->
+      <div class="analysis-actions" style="margin-bottom:20px;">
+        <button class="btn-primary" onclick="loadBenchmarkDatasets()" style="display:flex;align-items:center;gap:6px;">
+          <i data-lucide="refresh-cw" style="width:15px;height:15px;"></i> Refresh Datasets &amp; Outputs
+        </button>
+        <span class="analysis-status" id="benchmarks-status"></span>
+      </div>
+
+      <!-- Summary KPI Cards -->
+      <div class="analysis-stats-grid" id="benchmarks-stats-grid" style="margin-bottom:24px;">
+        <div class="analysis-stat-card">
+          <div class="asc-icon" style="color:#6366f1;"><i data-lucide="database" style="width:22px;height:22px;"></i></div>
+          <div class="asc-value" id="bm-total-datasets">—</div>
+          <div class="asc-label">Benchmark Datasets</div>
+        </div>
+        <div class="analysis-stat-card">
+          <div class="asc-icon" style="color:#22c55e;"><i data-lucide="check-circle" style="width:22px;height:22px;"></i></div>
+          <div class="asc-value" id="bm-available">—</div>
+          <div class="asc-label">Locally Available</div>
+        </div>
+        <div class="analysis-stat-card">
+          <div class="asc-icon" style="color:#38bdf8;"><i data-lucide="grid-3x3" style="width:22px;height:22px;"></i></div>
+          <div class="asc-value" id="bm-total-tiles">—</div>
+          <div class="asc-label">Generated Tiles</div>
+        </div>
+        <div class="analysis-stat-card">
+          <div class="asc-icon" style="color:#f59e0b;"><i data-lucide="layers" style="width:22px;height:22px;"></i></div>
+          <div class="asc-value" id="bm-outputs-count">—</div>
+          <div class="asc-label">Processed Output Runs</div>
+        </div>
+      </div>
+
+      <!-- Dataset Catalog Table -->
+      <div class="analysis-split-card" style="margin-bottom:24px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="width:32px;height:32px;border-radius:8px;background:rgba(99,102,241,0.15);color:#6366f1;display:flex;align-items:center;justify-content:center;">
+              <i data-lucide="database" style="width:18px;height:18px;"></i>
+            </div>
+            <div>
+              <h3 style="font-size:1.05rem;font-weight:700;margin:0;">Benchmark Datasets Catalog &amp; Database</h3>
+              <p style="font-size:0.75rem;color:var(--text-muted);margin:0;">Standardized drone &amp; aerial datasets registered in project pipeline</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="benchmark-table-wrap">
+          <table class="benchmark-table" id="benchmarks-table">
+            <thead>
+              <tr>
+                <th>Dataset Name</th>
+                <th>Platform / Sensor</th>
+                <th>Resolution</th>
+                <th>Classes</th>
+                <th>Status</th>
+                <th>Local Tiles</th>
+                <th>Action / Download</th>
+              </tr>
+            </thead>
+            <tbody id="benchmarks-table-body">
+              <tr>
+                <td colspan="7" style="text-align:center;color:var(--text-muted);padding:20px;">
+                  Loading benchmark datasets...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Outputs & Predictions Explorer Table -->
+      <div class="analysis-split-card" style="margin-bottom:24px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="width:32px;height:32px;border-radius:8px;background:rgba(34,197,94,0.15);color:#22c55e;display:flex;align-items:center;justify-content:center;">
+              <i data-lucide="map-pin" style="width:18px;height:18px;"></i>
+            </div>
+            <div>
+              <h3 style="font-size:1.05rem;font-weight:700;margin:0;">All Processing &amp; Inference Outputs</h3>
+              <p style="font-size:0.75rem;color:var(--text-muted);margin:0;">Visual segmentation layers, GeoJSON vectors, and evaluation metrics across all runs</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="benchmark-table-wrap">
+          <table class="benchmark-table" id="outputs-table">
+            <thead>
+              <tr>
+                <th>Run / Dataset Output</th>
+                <th>Generated Features</th>
+                <th>Metrics (mIoU / F1)</th>
+                <th>Timestamp / Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="outputs-table-body">
+              <tr>
+                <td colspan="5" style="text-align:center;color:var(--text-muted);padding:20px;">
+                  Loading output runs...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Expandable Detail Cards -->
+      <div id="benchmarks-detail-cards"></div>
 
     </div>
 

@@ -1,6 +1,6 @@
 {
   "tile_stats": {
-    "count": 29,
+    "count": 112,
     "width_range": [
       256,
       256
@@ -9,10 +9,10 @@
       256,
       256
     ],
-    "avg_file_size_kb": 107.8,
-    "total_size_mb": 3.05,
-    "total_pixels": 589824,
-    "masks_found": 9
+    "avg_file_size_kb": 121.8,
+    "total_size_mb": 13.32,
+    "total_pixels": 7340032,
+    "masks_found": 112
   },
   "class_names": [
     "background",
@@ -22,296 +22,1043 @@
   ],
   "class_distribution": {
     "background": {
-      "pixel_count": 393831,
-      "percentage": 66.77
+      "pixel_count": 2209035,
+      "percentage": 30.1
     },
     "building": {
-      "pixel_count": 110539,
-      "percentage": 18.74
+      "pixel_count": 1315597,
+      "percentage": 17.92
     },
     "road": {
-      "pixel_count": 71424,
-      "percentage": 12.11
+      "pixel_count": 1777558,
+      "percentage": 24.22
     },
     "vegetation": {
-      "pixel_count": 14030,
-      "percentage": 2.38
+      "pixel_count": 2037842,
+      "percentage": 27.76
     }
   },
   "class_weights": [
-    0.1049,
-    0.3736,
-    0.5782,
-    2.9434
+    0.7991,
+    1.3417,
+    0.993,
+    0.8662
   ],
-  "imbalance_ratio": 28.07,
+  "imbalance_ratio": 1.68,
   "split_summary": {
-    "total": 29,
-    "train": 23,
-    "val": 4,
-    "test": 2
+    "total": 112,
+    "train": 85,
+    "val": 16,
+    "test": 11
   },
   "file_details": [
     {
-      "name": "demo_residential_ortho_r0000_c0000.tif",
+      "name": "potsdam_2_10_00000_00000.png",
       "width": 256,
       "height": 256,
       "bands": 3,
       "dtype": "uint8",
-      "size_bytes": 11004,
+      "size_bytes": 145759,
       "has_mask": true
     },
     {
-      "name": "demo_residential_ortho_r0000_c0001.tif",
+      "name": "potsdam_2_10_00000_00217.png",
       "width": 256,
       "height": 256,
       "bands": 3,
       "dtype": "uint8",
-      "size_bytes": 11113,
+      "size_bytes": 146514,
       "has_mask": true
     },
     {
-      "name": "demo_residential_ortho_r0000_c0002.tif",
+      "name": "potsdam_2_10_00217_00000.png",
       "width": 256,
       "height": 256,
       "bands": 3,
       "dtype": "uint8",
-      "size_bytes": 8373,
+      "size_bytes": 143002,
       "has_mask": true
     },
     {
-      "name": "demo_residential_ortho_r0001_c0000.tif",
+      "name": "potsdam_2_10_00217_00217.png",
       "width": 256,
       "height": 256,
       "bands": 3,
       "dtype": "uint8",
-      "size_bytes": 10799,
+      "size_bytes": 153474,
       "has_mask": true
     },
     {
-      "name": "demo_residential_ortho_r0001_c0001.tif",
+      "name": "potsdam_2_11_00000_00000.png",
       "width": 256,
       "height": 256,
       "bands": 3,
       "dtype": "uint8",
-      "size_bytes": 11092,
+      "size_bytes": 146732,
       "has_mask": true
     },
     {
-      "name": "demo_residential_ortho_r0001_c0002.tif",
+      "name": "potsdam_2_11_00000_00217.png",
       "width": 256,
       "height": 256,
       "bands": 3,
       "dtype": "uint8",
-      "size_bytes": 8880,
+      "size_bytes": 150940,
       "has_mask": true
     },
     {
-      "name": "demo_residential_ortho_r0002_c0000.tif",
+      "name": "potsdam_2_11_00217_00000.png",
       "width": 256,
       "height": 256,
       "bands": 3,
       "dtype": "uint8",
-      "size_bytes": 9146,
+      "size_bytes": 152178,
       "has_mask": true
     },
     {
-      "name": "demo_residential_ortho_r0002_c0001.tif",
+      "name": "potsdam_2_11_00217_00217.png",
       "width": 256,
       "height": 256,
       "bands": 3,
       "dtype": "uint8",
-      "size_bytes": 9939,
+      "size_bytes": 155784,
       "has_mask": true
     },
     {
-      "name": "demo_residential_ortho_r0002_c0002.tif",
+      "name": "potsdam_3_10_00000_00000.png",
       "width": 256,
       "height": 256,
       "bands": 3,
       "dtype": "uint8",
-      "size_bytes": 7882,
+      "size_bytes": 146083,
       "has_mask": true
     },
     {
-      "name": "odm_aukerman_orthophoto_r0000_c0000.tif",
+      "name": "potsdam_3_10_00000_00217.png",
       "width": 256,
       "height": 256,
       "bands": 3,
       "dtype": "uint8",
-      "size_bytes": 78667,
-      "has_mask": false
+      "size_bytes": 158609,
+      "has_mask": true
     },
     {
-      "name": "odm_aukerman_orthophoto_r0000_c0001.tif",
+      "name": "potsdam_3_10_00217_00000.png",
       "width": 256,
       "height": 256,
       "bands": 3,
       "dtype": "uint8",
-      "size_bytes": 210396,
-      "has_mask": false
+      "size_bytes": 154664,
+      "has_mask": true
     },
     {
-      "name": "odm_aukerman_orthophoto_r0000_c0002.tif",
+      "name": "potsdam_3_10_00217_00217.png",
       "width": 256,
       "height": 256,
       "bands": 3,
       "dtype": "uint8",
-      "size_bytes": 205142,
-      "has_mask": false
+      "size_bytes": 157803,
+      "has_mask": true
     },
     {
-      "name": "odm_aukerman_orthophoto_r0000_c0003.tif",
+      "name": "potsdam_3_11_00000_00000.png",
       "width": 256,
       "height": 256,
       "bands": 3,
       "dtype": "uint8",
-      "size_bytes": 90243,
-      "has_mask": false
+      "size_bytes": 155623,
+      "has_mask": true
     },
     {
-      "name": "odm_aukerman_orthophoto_r0000_c0004.tif",
+      "name": "potsdam_3_11_00000_00217.png",
       "width": 256,
       "height": 256,
       "bands": 3,
       "dtype": "uint8",
-      "size_bytes": 4259,
-      "has_mask": false
+      "size_bytes": 141153,
+      "has_mask": true
     },
     {
-      "name": "odm_aukerman_orthophoto_r0001_c0000.tif",
+      "name": "potsdam_3_11_00217_00000.png",
       "width": 256,
       "height": 256,
       "bands": 3,
       "dtype": "uint8",
-      "size_bytes": 150851,
-      "has_mask": false
+      "size_bytes": 148337,
+      "has_mask": true
     },
     {
-      "name": "odm_aukerman_orthophoto_r0001_c0001.tif",
+      "name": "potsdam_3_11_00217_00217.png",
       "width": 256,
       "height": 256,
       "bands": 3,
       "dtype": "uint8",
-      "size_bytes": 218885,
-      "has_mask": false
+      "size_bytes": 161533,
+      "has_mask": true
     },
     {
-      "name": "odm_aukerman_orthophoto_r0001_c0002.tif",
+      "name": "uavid_train_seq1_000000_00000_00000.png",
       "width": 256,
       "height": 256,
       "bands": 3,
       "dtype": "uint8",
-      "size_bytes": 218959,
-      "has_mask": false
+      "size_bytes": 44517,
+      "has_mask": true
     },
     {
-      "name": "odm_aukerman_orthophoto_r0001_c0003.tif",
+      "name": "uavid_train_seq1_000000_00000_00217.png",
       "width": 256,
       "height": 256,
       "bands": 3,
       "dtype": "uint8",
-      "size_bytes": 228289,
-      "has_mask": false
+      "size_bytes": 129678,
+      "has_mask": true
     },
     {
-      "name": "odm_aukerman_orthophoto_r0001_c0004.tif",
+      "name": "uavid_train_seq1_000000_00000_00434.png",
       "width": 256,
       "height": 256,
       "bands": 3,
       "dtype": "uint8",
-      "size_bytes": 106930,
-      "has_mask": false
+      "size_bytes": 132510,
+      "has_mask": true
     },
     {
-      "name": "odm_aukerman_orthophoto_r0002_c0000.tif",
+      "name": "uavid_train_seq1_000000_00000_00651.png",
       "width": 256,
       "height": 256,
       "bands": 3,
       "dtype": "uint8",
-      "size_bytes": 176530,
-      "has_mask": false
+      "size_bytes": 49593,
+      "has_mask": true
     },
     {
-      "name": "odm_aukerman_orthophoto_r0002_c0001.tif",
+      "name": "uavid_train_seq1_000000_00217_00000.png",
       "width": 256,
       "height": 256,
       "bands": 3,
       "dtype": "uint8",
-      "size_bytes": 223000,
-      "has_mask": false
+      "size_bytes": 95146,
+      "has_mask": true
     },
     {
-      "name": "odm_aukerman_orthophoto_r0002_c0002.tif",
+      "name": "uavid_train_seq1_000000_00217_00217.png",
       "width": 256,
       "height": 256,
       "bands": 3,
       "dtype": "uint8",
-      "size_bytes": 227072,
-      "has_mask": false
+      "size_bytes": 144980,
+      "has_mask": true
     },
     {
-      "name": "odm_aukerman_orthophoto_r0002_c0003.tif",
+      "name": "uavid_train_seq1_000000_00217_00434.png",
       "width": 256,
       "height": 256,
       "bands": 3,
       "dtype": "uint8",
-      "size_bytes": 235769,
-      "has_mask": false
+      "size_bytes": 146069,
+      "has_mask": true
     },
     {
-      "name": "odm_aukerman_orthophoto_r0002_c0004.tif",
+      "name": "uavid_train_seq1_000000_00217_00651.png",
       "width": 256,
       "height": 256,
       "bands": 3,
       "dtype": "uint8",
-      "size_bytes": 130567,
-      "has_mask": false
+      "size_bytes": 149054,
+      "has_mask": true
     },
     {
-      "name": "odm_aukerman_orthophoto_r0003_c0000.tif",
+      "name": "uavid_train_seq1_000000_00434_00000.png",
       "width": 256,
       "height": 256,
       "bands": 3,
       "dtype": "uint8",
-      "size_bytes": 89295,
-      "has_mask": false
+      "size_bytes": 109187,
+      "has_mask": true
     },
     {
-      "name": "odm_aukerman_orthophoto_r0003_c0001.tif",
+      "name": "uavid_train_seq1_000000_00434_00217.png",
       "width": 256,
       "height": 256,
       "bands": 3,
       "dtype": "uint8",
-      "size_bytes": 163328,
-      "has_mask": false
+      "size_bytes": 145821,
+      "has_mask": true
     },
     {
-      "name": "odm_aukerman_orthophoto_r0003_c0002.tif",
+      "name": "uavid_train_seq1_000000_00434_00434.png",
       "width": 256,
       "height": 256,
       "bands": 3,
       "dtype": "uint8",
-      "size_bytes": 193959,
-      "has_mask": false
+      "size_bytes": 151641,
+      "has_mask": true
     },
     {
-      "name": "odm_aukerman_orthophoto_r0003_c0003.tif",
+      "name": "uavid_train_seq1_000000_00434_00651.png",
       "width": 256,
       "height": 256,
       "bands": 3,
       "dtype": "uint8",
-      "size_bytes": 134324,
-      "has_mask": false
+      "size_bytes": 157629,
+      "has_mask": true
     },
     {
-      "name": "odm_aukerman_orthophoto_r0003_c0004.tif",
+      "name": "uavid_train_seq1_000001_00000_00000.png",
       "width": 256,
       "height": 256,
       "bands": 3,
       "dtype": "uint8",
-      "size_bytes": 25803,
-      "has_mask": false
+      "size_bytes": 37851,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq1_000001_00000_00217.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 133648,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq1_000001_00000_00434.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 138068,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq1_000001_00000_00651.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 66686,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq1_000001_00217_00000.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 83451,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq1_000001_00217_00217.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 145230,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq1_000001_00217_00434.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 144174,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq1_000001_00217_00651.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 152150,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq1_000001_00434_00000.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 96591,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq1_000001_00434_00217.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 145415,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq1_000001_00434_00434.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 149850,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq1_000001_00434_00651.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 154736,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq2_000000_00000_00000.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 32661,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq2_000000_00000_00217.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 123535,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq2_000000_00000_00434.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 131619,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq2_000000_00000_00651.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 53564,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq2_000000_00217_00000.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 82537,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq2_000000_00217_00217.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 146035,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq2_000000_00217_00434.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 147384,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq2_000000_00217_00651.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 148662,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq2_000000_00434_00000.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 99849,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq2_000000_00434_00217.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 146220,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq2_000000_00434_00434.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 151854,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq2_000000_00434_00651.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 157814,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq2_000001_00000_00000.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 43039,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq2_000001_00000_00217.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 126215,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq2_000001_00000_00434.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 129921,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq2_000001_00000_00651.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 42037,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq2_000001_00217_00000.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 97339,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq2_000001_00217_00217.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 145576,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq2_000001_00217_00434.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 147830,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq2_000001_00217_00651.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 144975,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq2_000001_00434_00000.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 114655,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq2_000001_00434_00217.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 146694,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq2_000001_00434_00434.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 152152,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_train_seq2_000001_00434_00651.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 159251,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq1_000000_00000_00000.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 44517,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq1_000000_00000_00217.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 129678,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq1_000000_00000_00434.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 132510,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq1_000000_00000_00651.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 49593,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq1_000000_00217_00000.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 95146,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq1_000000_00217_00217.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 144980,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq1_000000_00217_00434.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 146069,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq1_000000_00217_00651.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 149054,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq1_000000_00434_00000.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 109187,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq1_000000_00434_00217.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 145821,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq1_000000_00434_00434.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 151641,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq1_000000_00434_00651.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 157629,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq1_000001_00000_00000.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 37851,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq1_000001_00000_00217.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 133648,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq1_000001_00000_00434.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 138068,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq1_000001_00000_00651.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 66686,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq1_000001_00217_00000.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 83451,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq1_000001_00217_00217.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 145230,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq1_000001_00217_00434.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 144174,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq1_000001_00217_00651.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 152150,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq1_000001_00434_00000.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 96591,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq1_000001_00434_00217.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 145415,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq1_000001_00434_00434.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 149850,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq1_000001_00434_00651.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 154736,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq2_000000_00000_00000.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 32661,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq2_000000_00000_00217.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 123535,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq2_000000_00000_00434.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 131619,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq2_000000_00000_00651.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 53564,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq2_000000_00217_00000.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 82537,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq2_000000_00217_00217.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 146035,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq2_000000_00217_00434.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 147384,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq2_000000_00217_00651.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 148662,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq2_000000_00434_00000.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 99849,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq2_000000_00434_00217.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 146220,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq2_000000_00434_00434.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 151854,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq2_000000_00434_00651.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 157814,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq2_000001_00000_00000.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 43039,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq2_000001_00000_00217.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 126215,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq2_000001_00000_00434.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 129921,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq2_000001_00000_00651.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 42037,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq2_000001_00217_00000.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 97339,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq2_000001_00217_00217.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 145576,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq2_000001_00217_00434.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 147830,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq2_000001_00217_00651.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 144975,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq2_000001_00434_00000.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 114655,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq2_000001_00434_00217.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 146694,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq2_000001_00434_00434.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 152152,
+      "has_mask": true
+    },
+    {
+      "name": "uavid_valid_seq2_000001_00434_00651.png",
+      "width": 256,
+      "height": 256,
+      "bands": 3,
+      "dtype": "uint8",
+      "size_bytes": 159251,
+      "has_mask": true
     }
   ]
 }

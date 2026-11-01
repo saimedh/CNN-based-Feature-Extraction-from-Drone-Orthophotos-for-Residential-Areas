@@ -168,22 +168,6 @@ function clearFile() {
   document.getElementById('progress-wrap').style.display = 'none';
 }
 
-async function loadSampleOrthophoto(filename) {
-  showToast(`Loading sample ${filename}...`, 'info');
-  try {
-    const res = await fetch(`/data/raw/${filename}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}: /data/raw/${filename}`);
-    const blob = await res.blob();
-    const file = new File([blob], filename, { type: 'image/tiff' });
-    setFile(file);
-    showToast(`Loaded ${filename}! Click 'Extract Features' below to run.`, 'success');
-  } catch (err) {
-    console.error('Failed to load sample:', err);
-    showToast(`Failed to load sample: ${err.message}`, 'error');
-  }
-}
-window.loadSampleOrthophoto = loadSampleOrthophoto;
-
 // ═══════════════════════════════════════════ Folder Mode & Batch ════
 function setUploadMode(mode) {
   state.mode = mode;
@@ -814,6 +798,7 @@ function switchTab(tab) {
   // Populate models page with live data
   if (tab === 'models') {
     populateModelsPage();
+    populateLiveBenchmarkTable();
   }
   // Populate analysis run selector when switching to analysis tab
   if (tab === 'analysis') {
@@ -861,6 +846,72 @@ async function populateModelsPage() {
   } catch (e) {
     console.warn('Could not populate models page:', e);
   }
+}
+
+function formatMaybePct(value, alreadyPercent) {
+  if (value == null || value === '' || Number.isNaN(Number(value))) return 'N/A';
+  const n = Number(value);
+  return `${(alreadyPercent ? n : n * 100).toFixed(1)}%`;
+}
+
+async function populateLiveBenchmarkTable() {
+  const tbody = document.getElementById('live-benchmark-tbody');
+  if (!tbody) return;
+  const endpoint = getApiEndpoint();
+  const rows = [];
+
+  try {
+    const url = currentRunId
+      ? `${endpoint}/model/accuracy?run_id=${encodeURIComponent(currentRunId)}`
+      : `${endpoint}/model/accuracy`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.mean_iou != null || data.metrics_source === 'test_split_evaluation' || data.metrics_source === 'ground_truth') {
+        rows.push(`
+          <tr class="bt-highlight" style="background: rgba(99,102,241,0.16); border-left: 3px solid #6366f1;">
+            <td><strong>${data.model_architecture || 'CNN'} / ${data.encoder || ''}</strong></td>
+            <td>${data.metrics_source || 'live'}</td>
+            <td>${data.split || data.run_id || 'checkpoint'}</td>
+            <td><strong>${formatMaybePct(data.mean_iou)}</strong></td>
+            <td>${formatMaybePct(data.per_class?.building?.iou)}</td>
+            <td>${formatMaybePct(data.per_class?.road?.iou)}</td>
+            <td>${formatMaybePct(data.per_class?.vegetation?.iou)}</td>
+            <td>${formatMaybePct(data.mean_f1)}</td>
+            <td>—</td>
+          </tr>`);
+      }
+    }
+  } catch (e) {
+    console.warn('Live checkpoint accuracy unavailable', e);
+  }
+
+  try {
+    const res = await fetch(`${endpoint}/analysis/multi-model-accuracy`, { signal: AbortSignal.timeout(8000) });
+    if (res.ok) {
+      const report = await res.json();
+      (report.models || []).forEach((m) => {
+        rows.push(`
+          <tr>
+            <td><strong>${m.name}</strong></td>
+            <td>${m.metrics_source || 'tiled_dataset_eval'}</td>
+            <td>${report.epochs || ''} epoch train</td>
+            <td><strong>${formatMaybePct(m.mean_iou_pct, true)}</strong></td>
+            <td>${formatMaybePct(m.class_breakdown?.building?.iou, true)}</td>
+            <td>${formatMaybePct(m.class_breakdown?.road?.iou, true)}</td>
+            <td>${formatMaybePct(m.class_breakdown?.vegetation?.iou, true)}</td>
+            <td>${formatMaybePct(m.mean_f1_pct, true)}</td>
+            <td>${m.inference_fps != null ? `${m.inference_fps} fps` : 'N/A'}</td>
+          </tr>`);
+      });
+    }
+  } catch (e) {
+    console.warn('Multi-model live accuracy unavailable', e);
+  }
+
+  tbody.innerHTML = rows.length
+    ? rows.join('')
+    : '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:16px;">No measured accuracy yet. Process an orthophoto with a mask, run evaluation/evaluate.py, or Train &amp; Benchmark on tiled labels.</td></tr>';
 }
 
 function showToast(msg, type = 'info') {
@@ -1237,20 +1288,24 @@ function switchAnalysisSubtab(sub) {
   const prBtn = document.getElementById('subtab-prediction');
   const mmBtn = document.getElementById('subtab-multimodel');
   const resBtn = document.getElementById('subtab-resources');
+  const bmBtn = document.getElementById('subtab-benchmarks');
   const dsPanel = document.getElementById('analysis-dataset-panel');
   const prPanel = document.getElementById('analysis-prediction-panel');
   const mmPanel = document.getElementById('analysis-multimodel-panel');
   const resPanel = document.getElementById('analysis-resources-panel');
+  const bmPanel = document.getElementById('analysis-benchmarks-panel');
 
   // Reset active classes
   dsBtn?.classList.remove('active');
   prBtn?.classList.remove('active');
   mmBtn?.classList.remove('active');
   resBtn?.classList.remove('active');
+  bmBtn?.classList.remove('active');
   if (dsPanel) dsPanel.style.display = 'none';
   if (prPanel) prPanel.style.display = 'none';
   if (mmPanel) mmPanel.style.display = 'none';
   if (resPanel) resPanel.style.display = 'none';
+  if (bmPanel) bmPanel.style.display = 'none';
 
   if (sub === 'dataset') {
     dsBtn?.classList.add('active');
@@ -1267,8 +1322,240 @@ function switchAnalysisSubtab(sub) {
     resBtn?.classList.add('active');
     if (resPanel) resPanel.style.display = '';
     loadDataResources();
+  } else if (sub === 'benchmarks') {
+    bmBtn?.classList.add('active');
+    if (bmPanel) bmPanel.style.display = '';
+    loadBenchmarkDatasets();
   }
   if (window.lucide) lucide.createIcons();
+}
+
+// ═══════════════════════════════════════════ Benchmark Datasets & Outputs Catalog ════
+
+async function loadBenchmarkDatasets() {
+  const statusEl = document.getElementById('benchmarks-status');
+  const tableBody = document.getElementById('benchmarks-table-body');
+  const outputsBody = document.getElementById('outputs-table-body');
+  const cardsContainer = document.getElementById('benchmarks-detail-cards');
+  const endpoint = getApiEndpoint();
+
+  if (statusEl) {
+    statusEl.textContent = 'Loading benchmark datasets & outputs...';
+    statusEl.style.color = '';
+  }
+
+  try {
+    const [resDatasets, resRuns] = await Promise.all([
+      fetch(`${endpoint}/datasets`, { signal: AbortSignal.timeout(10000) }),
+      fetch(`${endpoint}/runs`, { signal: AbortSignal.timeout(10000) })
+    ]);
+
+    if (!resDatasets.ok) throw new Error(`Datasets API error: ${resDatasets.status}`);
+    const data = await resDatasets.json();
+    const runsData = resRuns.ok ? await resRuns.json() : { runs: [] };
+    const runs = runsData.runs || [];
+
+    // KPI cards
+    setEl('bm-total-datasets', data.total_datasets ?? 0);
+    setEl('bm-available', data.available_locally ?? 0);
+    setEl('bm-total-tiles', data.total_tiles ?? 0);
+    setEl('bm-outputs-count', runs.length);
+
+    // Benchmarks table
+    if (tableBody) {
+      if (!data.catalog || data.catalog.length === 0) {
+        tableBody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:16px;">No datasets found in catalog.</td></tr>';
+      } else {
+        tableBody.innerHTML = data.catalog.map(d => {
+          const isAvail = d.local_available;
+          const statusBadge = isAvail
+            ? `<span style="font-size:0.72rem;padding:3px 8px;border-radius:99px;background:rgba(34,197,94,0.15);color:#22c55e;font-weight:700;">✓ Available</span>`
+            : `<span style="font-size:0.72rem;padding:3px 8px;border-radius:99px;background:rgba(148,163,184,0.15);color:#94a3b8;font-weight:600;">Not Downloaded</span>`;
+
+          const tileCount = (d.tile_count_images > 0)
+            ? `<span style="color:#38bdf8;font-weight:700;">${d.tile_count_images}</span> tiles <span style="font-size:0.7rem;color:var(--text-muted);">(${d.tile_count_masks} masks)</span>`
+            : `<span style="color:var(--text-muted);">0 tiles</span>`;
+
+          const classPills = (d.classes || []).slice(0, 4).map(c =>
+            `<span style="font-size:0.68rem;padding:1px 5px;background:rgba(255,255,255,0.06);border-radius:4px;color:var(--text);">${c}</span>`
+          ).join(' ') + (d.classes && d.classes.length > 4 ? ` <span style="font-size:0.68rem;color:var(--text-muted);">+${d.classes.length - 4}</span>` : '');
+
+          let actionBtn = '';
+          if (isAvail) {
+            actionBtn = `
+              <button class="btn-ghost" style="padding:3px 8px;font-size:0.72rem;color:#38bdf8;" onclick="toggleDatasetCard('${d.id}')">
+                <i data-lucide="info" style="width:12px;height:12px;"></i> Inspect
+              </button>
+            `;
+          } else {
+            actionBtn = `
+              <button class="btn-ghost" style="padding:3px 8px;font-size:0.72rem;color:#f59e0b;" onclick="toggleDatasetCard('${d.id}')">
+                <i data-lucide="download" style="width:12px;height:12px;"></i> Setup Info
+              </button>
+            `;
+          }
+
+          if (d.access_url) {
+            actionBtn += `
+              <a href="${d.access_url}" target="_blank" rel="noopener noreferrer" class="btn-ghost" style="padding:3px 8px;font-size:0.72rem;text-decoration:none;margin-left:4px;">
+                <i data-lucide="external-link" style="width:12px;height:12px;"></i> Link
+              </a>
+            `;
+          }
+
+          return `
+            <tr>
+              <td>
+                <div style="font-weight:700;color:var(--text);">${d.name}</div>
+                <div style="font-size:0.72rem;color:var(--text-muted);max-width:280px;line-height:1.3;margin-top:2px;">${d.description}</div>
+              </td>
+              <td><span style="font-size:0.78rem;font-weight:600;">${d.platform}</span><br><span style="font-size:0.7rem;color:var(--text-muted);">${d.sensor}</span></td>
+              <td><code style="font-size:0.75rem;">${d.resolution_gsd}</code></td>
+              <td><div style="display:flex;flex-wrap:wrap;gap:3px;max-width:200px;">${classPills}</div></td>
+              <td>${statusBadge}</td>
+              <td>${tileCount}</td>
+              <td style="white-space:nowrap;">${actionBtn}</td>
+            </tr>
+          `;
+        }).join('');
+      }
+    }
+
+    // Outputs table (all output displayed on website)
+    if (outputsBody) {
+      if (runs.length === 0) {
+        outputsBody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:16px;">No output runs found yet. Run an inference job or select a demo orthophoto.</td></tr>';
+      } else {
+        outputsBody.innerHTML = runs.map(r => {
+          const runId = r.id;
+          const runName = r.name || runId;
+          const features = (r.classes || ['building', 'road', 'vegetation']).map(c => {
+            const color = c === 'building' ? '#ef4444' : c === 'road' ? '#a855f7' : '#22c55e';
+            return `<span style="font-size:0.7rem;padding:2px 6px;border-radius:4px;background:${color}22;color:${color};font-weight:600;">${c}</span>`;
+          }).join(' ');
+
+          const metrics = r.metrics;
+          let metricStr = '—';
+          if (metrics) {
+            const miou = metrics.mean_iou ?? metrics.mIoU;
+            const f1 = metrics.mean_dice ?? metrics.f1_score;
+            if (miou !== undefined) {
+              metricStr = `<span style="color:#22c55e;font-weight:700;">${(miou * 100).toFixed(1)}% mIoU</span>`;
+              if (f1 !== undefined) {
+                metricStr += ` <span style="color:var(--text-muted);font-size:0.7rem;">(F1: ${(f1 * 100).toFixed(1)}%)</span>`;
+              }
+            }
+          }
+
+          return `
+            <tr>
+              <td>
+                <div style="font-weight:700;color:#38bdf8;">${runName}</div>
+                <div style="font-size:0.7rem;color:var(--text-muted);"><code style="font-size:0.68rem;">outputs/${runId}</code></div>
+              </td>
+              <td><div style="display:flex;flex-wrap:wrap;gap:4px;">${features}</div></td>
+              <td>${metricStr}</td>
+              <td><span style="font-size:0.75rem;color:var(--text-muted);">${r.created_at ? new Date(r.created_at * 1000).toLocaleString() : 'Ready'}</span></td>
+              <td style="white-space:nowrap;">
+                <button class="btn-primary" style="padding:4px 10px;font-size:0.72rem;display:inline-flex;align-items:center;gap:4px;" onclick="viewRunOnMap('${runId}')">
+                  <i data-lucide="eye" style="width:12px;height:12px;"></i> View on Map
+                </button>
+                <button class="btn-ghost" style="padding:4px 8px;font-size:0.72rem;margin-left:4px;" onclick="viewRunInAnalysis('${runId}')">
+                  <i data-lucide="bar-chart-2" style="width:12px;height:12px;"></i> Analytics
+                </button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+    }
+
+    // Detail & setup cards
+    if (cardsContainer && data.catalog) {
+      cardsContainer.innerHTML = data.catalog.map(d => `
+        <div class="analysis-split-card" id="dataset-card-${d.id}" style="margin-bottom:16px;display:none;border-left:4px solid ${d.local_available ? '#22c55e' : '#6366f1'};">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px;">
+            <div>
+              <h4 style="margin:0 0 4px 0;font-size:1rem;color:var(--text);font-weight:700;">
+                ${d.name} <span style="font-size:0.72rem;font-weight:normal;color:var(--text-muted);">(${d.spatial_coverage})</span>
+              </h4>
+              <p style="margin:0;font-size:0.78rem;color:var(--text-muted);line-height:1.4;">${d.description}</p>
+            </div>
+            <button class="btn-ghost" onclick="toggleDatasetCard('${d.id}')" style="padding:3px 8px;font-size:0.72rem;">Close</button>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px;margin-bottom:14px;background:rgba(255,255,255,0.02);padding:10px;border-radius:6px;">
+            <div><span style="font-size:0.7rem;color:var(--text-muted);">Sensor & Platform:</span><br><strong style="font-size:0.8rem;">${d.sensor} (${d.platform})</strong></div>
+            <div><span style="font-size:0.7rem;color:var(--text-muted);">GSD Resolution:</span><br><strong style="font-size:0.8rem;">${d.resolution_gsd}</strong></div>
+            <div><span style="font-size:0.7rem;color:var(--text-muted);">Local Directory:</span><br><code style="font-size:0.75rem;">${d.local_dir}</code></div>
+            <div><span style="font-size:0.7rem;color:var(--text-muted);">Adapter Script:</span><br><code style="font-size:0.75rem;">${d.adapter_script || 'Standard pipeline'}</code></div>
+          </div>
+
+          ${d.download_instructions ? `
+            <div style="background:rgba(0,0,0,0.3);padding:10px 12px;border-radius:6px;margin-bottom:10px;border:1px solid var(--border);">
+              <div style="font-size:0.7rem;color:#f59e0b;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:4px;">
+                <i data-lucide="terminal" style="width:12px;height:12px;"></i> Ingestion & Download Instructions:
+              </div>
+              <pre style="margin:0;font-family:monospace;font-size:0.75rem;color:#e2e8f0;white-space:pre-wrap;word-break:break-all;">${d.download_instructions}</pre>
+            </div>
+          ` : ''}
+
+          <div style="display:flex;align-items:center;gap:8px;margin-top:10px;">
+            ${d.adapter_script ? `
+              <span style="font-size:0.72rem;color:var(--text-muted);">Run adapter: <code>python ${d.adapter_script}</code></span>
+            ` : ''}
+            ${d.access_url ? `
+              <a href="${d.access_url}" target="_blank" rel="noopener noreferrer" class="btn-ghost" style="padding:3px 8px;font-size:0.72rem;text-decoration:none;margin-left:auto;">
+                Visit Official Portal <i data-lucide="external-link" style="width:11px;height:11px;"></i>
+              </a>
+            ` : ''}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    if (statusEl) {
+      statusEl.textContent = `✓ ${data.available_locally}/${data.total_datasets} datasets available (${runs.length} output runs loaded)`;
+      statusEl.style.color = '#22c55e';
+    }
+  } catch (err) {
+    console.error('Failed to load benchmark datasets:', err);
+    if (statusEl) {
+      statusEl.textContent = `✗ Failed to load: ${err.message}`;
+      statusEl.style.color = '#ef4444';
+    }
+  }
+  if (window.lucide) lucide.createIcons();
+}
+
+function toggleDatasetCard(id) {
+  const card = document.getElementById(`dataset-card-${id}`);
+  if (card) {
+    const isHidden = card.style.display === 'none';
+    card.style.display = isHidden ? '' : 'none';
+    if (isHidden) {
+      card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+}
+
+async function viewRunOnMap(runId) {
+  switchTab('dashboard');
+  const sel = document.getElementById('dataset-select');
+  if (sel) {
+    sel.value = runId;
+  }
+  await loadProcessedRun(runId);
+  showToast(`Loaded output run '${runId}' onto dashboard map!`, 'success');
+}
+
+function viewRunInAnalysis(runId) {
+  switchAnalysisSubtab('prediction');
+  const sel = document.getElementById('analysis-run-select');
+  if (sel) {
+    sel.value = runId;
+  }
+  loadPredictionAnalysis(runId);
 }
 
 // ═══════════════════════════════════════════ Multi-Model Training & Benchmark ════
@@ -1352,7 +1639,11 @@ async function loadMultiModelAccuracy() {
     }
   } catch (e) {
     console.error('Failed to load multi-model accuracy:', e);
-    if (statusEl) { statusEl.textContent = `✗ Failed: ${e.message}`; statusEl.style.color = '#ef4444'; }
+    if (tbody) tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-muted);padding:16px;">No live multi-model report. Train on tiled labelled data (not demo scores).</td></tr>';
+    if (statusEl) {
+      statusEl.textContent = 'No live report yet — train models on real tiles.';
+      statusEl.style.color = '#94a3b8';
+    }
   }
   if (window.lucide) lucide.createIcons();
 }
@@ -1407,6 +1698,14 @@ async function populateAnalysisRunSelector() {
       opt.textContent = r.name || r.id;
       sel.appendChild(opt);
     });
+
+    if (runs.length > 0) {
+      const preferred = currentRunId && runs.some(r => r.id === currentRunId)
+        ? currentRunId
+        : runs[0].id;
+      sel.value = preferred;
+      loadPredictionAnalysis(preferred);
+    }
   } catch (e) {
     console.warn('Could not fetch runs for analysis:', e);
   }
@@ -2003,6 +2302,10 @@ Object.assign(window, {
   executeTilingProcess,
   deleteDataResource,
   selectForTiling,
+  loadBenchmarkDatasets,
+  toggleDatasetCard,
+  viewRunOnMap,
+  viewRunInAnalysis,
 });
 
 // ═══════════════════════════════════════════ Init ════
@@ -2037,6 +2340,20 @@ async function initApp() {
     console.warn('Could not auto-load run:', e);
     fetchModelAccuracy('');
   }
+
+  setInterval(async () => {
+    const previous = currentRunId;
+    await fetchRunsAndPopulate();
+    const select = document.getElementById('dataset-select');
+    const nextId = select && select.value;
+    if (nextId && nextId !== previous) {
+      await loadProcessedRun(nextId);
+    } else if (currentRunId) {
+      fetchModelAccuracy(currentRunId);
+    } else {
+      fetchModelAccuracy('');
+    }
+  }, 20000);
 }
 
 if (document.readyState === 'loading') {

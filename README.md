@@ -405,59 +405,37 @@ Each class GeoJSON follows this schema:
 
 ---
 
-## Accuracy Benchmarks: Existing vs. Proposed Models
+## Accuracy Benchmarks
 
-### 1. Comparative Accuracy Across Datasets (Literature vs. Proposed Architecture)
+Live accuracy is **not hardcoded**. The dashboard reads:
 
-The table below contrasts existing baseline architectures with our proposed **OrthoSeg** pipeline (U-Net/DeepLabV3+ with ResNet34 backbone, Hybrid Dice-CE Loss, Overlap-Averaging Stride Stitching, and Morphological Douglas-Peucker Regularization).
+1. `outputs/<run>/metrics.json` after inference (IoU/Dice if a paired `*_mask` was uploaded; otherwise softmax confidence)
+2. `outputs/evaluation_report.json` from `python evaluation/evaluate.py` on the labelled test split
+3. `outputs/multi_model_accuracy_report.json` only after a real tiled-dataset train (synthetic fallback scores were removed)
 
-| Model Architecture | Baseline / Reference | Dataset | Mean IoU (mIoU) | Building IoU | Road IoU | Vegetation IoU | Mean F1 / Dice | Inference FPS |
-| :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **FCN-8s** | Long et al. (2015) | UAVid Benchmark | 58.4% | 66.2% | 58.1% | 57.4% | 72.8% | 38 fps |
-| **SegNet** | Badrinarayanan (2017) | ISPRS Potsdam | 65.3% | 72.0% | 58.7% | 64.2% | 78.4% | 32 fps |
-| **Vanilla U-Net** | Ronneberger (2015) | ISPRS Vaihingen | 71.5% | 78.2% | 62.4% | 68.1% | 82.9% | 45 fps |
-| **DeepLabV3+ (ResNet50)** | Chen et al. (2018) | UAVid Benchmark | 67.0% | 75.1% | 65.8% | 72.3% | 80.1% | 24 fps |
-| **PSPNet** | Zhao et al. (2017) | UAVid Benchmark | 68.5% | 74.0% | 63.2% | 70.5% | 81.0% | 28 fps |
-| **MAnet (Attention)** | Fan et al. (2020) | ISPRS Vaihingen | 74.1% | 81.5% | 67.3% | 71.2% | 84.8% | 21 fps |
-| **Proposed OrthoSeg (U-Net ResNet34)** | **This Work** | **ODM Aukerman (Drone)** | **73.2%** | **80.6%** | **65.8%** | **63.0%** | **84.5%** | **42 fps** |
-| **Proposed OrthoSeg (DeepLabV3+)** | **This Work** | **UAVid + ODM Multi-Site** | **76.8%** | **83.4%** | **70.2%** | **74.6%** | **86.9%** | **31 fps** |
+Latest checkpoint eval in this repo (`checkpoints/best.pt`, test split):
 
----
+| Class | IoU | Dice / F1 |
+| :--- | :---: | :---: |
+| Background | 66.6% | 80.0% |
+| Building | 54.8% | 70.8% |
+| Road | 35.1% | 51.9% |
+| Vegetation | 80.5% | 89.2% |
+| **Mean** | **59.3%** | **73.0%** |
 
-### 2. Class-Wise Performance Metrics Breakdown (Proposed Model)
-
-Evaluated on held-out test splits ($256 \times 256$ tiles, $N=500$ validation patches):
-
-| Class | Precision (%) | Recall (%) | F1-Score / Dice (%) | IoU / Jaccard (%) | Boundary Accuracy (BIoU) |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| **Background / Bare Soil** | 97.8% | 97.3% | 97.6% | 95.2% | 94.1% |
-| **Building Footprints** | 89.4% | 86.1% | 87.7% | **80.6%** | 82.4% |
-| **Roads & Pavements** | 85.2% | 83.6% | 84.4% | **65.8%** | 68.9% |
-| **Vegetation & Trees** | 88.7% | 87.2% | 88.0% | **74.6%** | 76.3% |
-| **Overall Macro Average** | **90.3%** | **88.6%** | **89.4%** | **79.1%** | **80.4%** |
-
----
-
-### 3. Key Accuracy Improvements Over Existing Baselines
-
-1. **Hybrid Loss Function ($\mathcal{L}_{\text{Dice}} + \mathcal{L}_{\text{BCE}}$)**:
-   - Overcomes severe class imbalance where background/vegetation occupies $>70\%$ of the scene, yielding $+4.2\%\text{ IoU}$ gain on thin road segments.
-2. **Tile Overlap Probability Averaging (15% Stride)**:
-   - Eliminates tile border artifacts and stitching seams, boosting building polygon boundary F1 by $+3.8\%$.
-3. **Morphological Douglas-Peucker Regularization**:
-   - Reduces jagged pixel staircase edges into clean, GIS-standard building footprints with an **$85\%$ vertex count reduction** while preserving $\ge 98.5\%$ spatial area accuracy.
+Upload a GeoTIFF + mask, or re-run evaluation, to refresh these numbers.
 
 ---
 
 ## Performance Targets & SLA
 
-| Metric | Target | Achieved in Proposed Pipeline | Status |
-| :--- | :---: | :---: | :---: |
-| **Building Footprint IoU** | $\ge 0.75$ | **0.806 (80.6%)** | Exceeded |
-| **Road Network F1-Score** | $\ge 0.80$ | **0.844 (84.4%)** | Exceeded |
-| **Vegetation IoU** | $\ge 0.70$ | **0.746 (74.6%)** | Exceeded |
-| **Inference Throughput** | $< 5\text{ min / km}^2$ | **~1.8 min / km² (RTX 3080 / T4)** | Exceeded |
-| **Vector Geometry Validity** | 100% Valid OGC Polygons | 100% (No self-intersections, topological repair) | Passed |
+| Metric | Target | How it is measured |
+| :--- | :---: | :--- |
+| **Building Footprint IoU** | $\ge 0.75$ | Live IoU vs ground-truth mask / test split |
+| **Road Network F1-Score** | $\ge 0.80$ | Live Dice/F1 vs ground-truth mask / test split |
+| **Vegetation IoU** | $\ge 0.70$ | Live IoU vs ground-truth mask / test split |
+| **Inference Throughput** | $< 5\text{ min / km}^2$ | Timed tiling + CNN + vectorize |
+| **Vector Geometry Validity** | 100% valid OGC polygons | Vectorize + topological repair |
 
 ---
 

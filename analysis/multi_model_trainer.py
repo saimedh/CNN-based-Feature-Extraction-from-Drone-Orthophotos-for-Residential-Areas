@@ -129,100 +129,87 @@ def train_single_model(
 
     # Dataloaders
     base_dir = Path(__file__).resolve().parent.parent
-    img_dir = base_dir / cfg.paths.tiles_dir / "images"
-    mask_dir = base_dir / cfg.paths.tiles_dir / "masks"
+    img_dir = base_dir / "data" / "tiles" / "images"
+    mask_dir = base_dir / "data" / "tiles" / "masks"
+    if not img_dir.is_dir() or not any(img_dir.iterdir()):
+        img_dir = base_dir / "data" / "tiles" / "tiles" / "images"
+        mask_dir = base_dir / "data" / "tiles" / "tiles" / "masks"
 
-    train_loader, val_loader, test_loader = None, None, None
-    if img_dir.is_dir() and mask_dir.is_dir() and len(list(img_dir.glob("*.tif"))) > 0:
-        try:
-            cfg.training.batch_size = batch_size
-            cfg.training.num_workers = 0
-            train_loader, val_loader, test_loader = build_dataloaders(
-                img_dir=img_dir,
-                mask_dir=mask_dir,
-                cfg=cfg,
-            )
-        except Exception as e:
-            logger.warning(f"Could not build standard dataloaders: {e}.")
+    all_tiles = list(img_dir.glob("*.tif")) + list(img_dir.glob("*.png"))
+    if not img_dir.is_dir() or not mask_dir.is_dir() or not all_tiles:
+        raise FileNotFoundError(
+            f"No tiled labelled dataset at '{img_dir}' / '{mask_dir}'. "
+            "Tile a GeoTIFF with a paired mask before training."
+        )
+
+    try:
+        cfg.training.batch_size = batch_size
+        cfg.training.num_workers = 0
+        train_loader, val_loader, test_loader = build_dataloaders(
+            img_dir=img_dir,
+            mask_dir=mask_dir,
+            cfg=cfg,
+        )
+    except Exception as e:
+        raise RuntimeError(f"Could not build dataloaders from tiled dataset: {e}") from e
+
+    if not train_loader or len(train_loader) == 0:
+        raise RuntimeError("Training loader is empty. Add labelled tiles before benchmarking.")
 
     criterion = build_loss(cfg)
     optimizer = AdamW(model.parameters(), lr=lr, weight_decay=1e-5)
 
     start_time = time.time()
     train_losses = []
-    val_losses = []
 
-    # Training loop
-    if train_loader and len(train_loader) > 0:
-        model.train()
-        for epoch in range(1, epochs + 1):
-            epoch_loss = 0.0
-            steps = 0
-            for batch in train_loader:
-                images = batch["image"].to(device, dtype=torch.float32)
-                masks = batch["mask"].to(device, dtype=torch.long)
+    model.train()
+    for epoch in range(1, epochs + 1):
+        epoch_loss = 0.0
+        steps = 0
+        for batch in train_loader:
+            images = batch["image"].to(device, dtype=torch.float32)
+            masks = batch["mask"].to(device, dtype=torch.long)
 
-                optimizer.zero_grad()
-                logits = model(images)
-                loss = criterion(logits, masks)
-                loss.backward()
-                optimizer.step()
+            optimizer.zero_grad()
+            logits = model(images)
+            loss = criterion(logits, masks)
+            loss.backward()
+            optimizer.step()
 
-                epoch_loss += loss.item()
-                steps += 1
+            epoch_loss += loss.item()
+            steps += 1
 
-            avg_loss = epoch_loss / max(1, steps)
-            train_losses.append(round(avg_loss, 4))
-            logger.info(f"Epoch {epoch}/{epochs} - Loss: {avg_loss:.4f}")
-    else:
-        # Fast simulated progress if dataset is not yet tiled
-        train_losses = [round(0.65 - (i * 0.08), 4) for i in range(epochs)]
+        avg_loss = epoch_loss / max(1, steps)
+        train_losses.append(round(avg_loss, 4))
+        logger.info(f"Epoch {epoch}/{epochs} - Loss: {avg_loss:.4f}")
 
     training_time_sec = round(time.time() - start_time, 2)
 
-    # Evaluation & Accuracy calculation
     model.eval()
     eval_metrics = SegmentationMetrics(num_classes=num_classes)
     eval_loader = test_loader or val_loader
+    if not eval_loader or len(eval_loader) == 0:
+        raise RuntimeError("No validation/test tiles available for real IoU/F1 accuracy.")
 
     inference_times = []
+    with torch.no_grad():
+        for batch in eval_loader:
+            images = batch["image"].to(device, dtype=torch.float32)
+            masks = batch["mask"]
+            t0 = time.time()
+            logits = model(images)
+            inference_times.append((time.time() - t0) / max(1, images.shape[0]))
+            eval_metrics.update(logits.cpu(), masks.cpu())
 
-    if eval_loader and len(eval_loader) > 0:
-        with torch.no_grad():
-            for batch in eval_loader:
-                images = batch["image"].to(device, dtype=torch.float32)
-                masks = batch["mask"]
-                t0 = time.time()
-                logits = model(images)
-                inference_times.append((time.time() - t0) / max(1, images.shape[0]))
-                eval_metrics.update(logits.cpu(), masks.cpu())
+    scores = eval_metrics.compute()
+    iou_per_class = scores["iou"]
+    f1_per_class = scores["f1"]
+    mean_iou = scores["mean_iou"]
+    mean_f1 = scores["mean_f1"]
+    pixel_acc = float(scores.get("pixel_accuracy") or 0.0)
 
-        scores = eval_metrics.compute()
-        iou_per_class = scores["iou"]
-        f1_per_class = scores["f1"]
-        mean_iou = scores["mean_iou"]
-        mean_f1 = scores["mean_f1"]
-        pixel_acc = scores.get("pixel_accuracy", 0.88)
-    else:
-        # Realistic benchmark baseline estimates for the architecture
-        benchmarks = {
-            "unet": {"miou": 0.732, "bldg": 0.806, "road": 0.658, "veg": 0.630, "bg": 0.952, "fps": 42},
-            "deeplabv3plus": {"miou": 0.768, "bldg": 0.834, "road": 0.702, "veg": 0.746, "bg": 0.961, "fps": 31},
-            "fpn": {"miou": 0.725, "bldg": 0.792, "road": 0.648, "veg": 0.680, "bg": 0.948, "fps": 48},
-            "manet": {"miou": 0.751, "bldg": 0.821, "road": 0.684, "veg": 0.725, "bg": 0.958, "fps": 26},
-            "pspnet": {"miou": 0.708, "bldg": 0.768, "road": 0.639, "veg": 0.695, "bg": 0.941, "fps": 34},
-            "linknet": {"miou": 0.695, "bldg": 0.754, "road": 0.612, "veg": 0.671, "bg": 0.938, "fps": 56},
-        }
-        b = benchmarks.get(model_key, benchmarks["unet"])
-        mean_iou = b["miou"]
-        mean_f1 = round((2 * mean_iou) / (1 + mean_iou), 4)
-        iou_per_class = [b["bg"], b["bldg"], b["road"], b["veg"]]
-        f1_per_class = [round((2 * i) / (1 + i), 4) for i in iou_per_class]
-        pixel_acc = round(mean_iou + 0.12, 4)
-        inference_times = [1.0 / b["fps"]]
-
-    avg_latency_ms = round(np.mean(inference_times) * 1000, 1) if inference_times else 25.0
-    fps = round(1000.0 / avg_latency_ms, 1) if avg_latency_ms > 0 else 40.0
+    avg_latency_ms = round(float(np.mean(inference_times)) * 1000, 1) if inference_times else None
+    fps = round(1000.0 / avg_latency_ms, 1) if avg_latency_ms else None
 
     class_names = list(cfg.dataset.classes)
     class_breakdown = {}
@@ -252,6 +239,7 @@ def train_single_model(
         "inference_fps": fps,
         "class_breakdown": class_breakdown,
         "train_losses": train_losses,
+        "metrics_source": "tiled_dataset_eval",
     }
 
 
@@ -301,6 +289,7 @@ def train_and_benchmark_multi_models(
         "learning_rate": lr,
         "best_model": results[0]["name"] if results else None,
         "best_miou": results[0]["mean_iou_pct"] if results else 0,
+        "metrics_source": "tiled_dataset_eval",
         "models": results,
     }
 
@@ -340,7 +329,7 @@ def generate_multi_model_chart(report: Dict[str, Any], output_path: str | Path) 
     bldgs = [m["class_breakdown"].get("building", {}).get("iou", 0) for m in models]
     roads = [m["class_breakdown"].get("road", {}).get("iou", 0) for m in models]
     vegs = [m["class_breakdown"].get("vegetation", {}).get("iou", 0) for m in models]
-    fps_list = [m["inference_fps"] for m in models]
+    fps_list = [m["inference_fps"] or 0 for m in models]
 
     x = np.arange(len(names))
     width = 0.18

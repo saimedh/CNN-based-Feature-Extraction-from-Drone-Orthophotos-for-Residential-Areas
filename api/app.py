@@ -433,10 +433,14 @@ async def dataset_analysis_endpoint(
     Returns class distribution, imbalance metrics, class weights, split summary,
     and per-tile file details.
     """
-    import os as _os
     base_dir = Path(__file__).resolve().parent.parent
-    _img_dir = img_dir or _os.path.join(str(base_dir), cfg.paths.tiles_dir, "images")
-    _mask_dir = mask_dir or _os.path.join(str(base_dir), cfg.paths.tiles_dir, "masks")
+    _img_dir = img_dir or str(base_dir / "data" / "tiles" / "images")
+    if not Path(_img_dir).is_dir() or not any(Path(_img_dir).iterdir()):
+        _img_dir = str(base_dir / cfg.paths.tiles_dir)
+
+    _mask_dir = mask_dir or str(base_dir / "data" / "tiles" / "masks")
+    if not Path(_mask_dir).is_dir() or not any(Path(_mask_dir).iterdir()):
+        _mask_dir = str(base_dir / getattr(cfg.paths, "masks_dir", "data/tiles/masks"))
 
     # Resolve relative paths
     _img_dir = str((base_dir / _img_dir).resolve()) if not Path(_img_dir).is_absolute() else _img_dir
@@ -471,8 +475,8 @@ async def dataset_chart_endpoint():
     if not chart_path.exists():
         # Generate it on the fly
         try:
-            _img_dir = str(base_dir / cfg.paths.tiles_dir / "images")
-            _mask_dir = str(base_dir / cfg.paths.tiles_dir / "masks")
+            _img_dir = str(base_dir / "data" / "tiles" / "images")
+            _mask_dir = str(base_dir / "data" / "tiles" / "masks")
             generate_sample_grid(_img_dir, _mask_dir, chart_path)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"Chart generation failed: {exc}")
@@ -736,6 +740,209 @@ async def list_data_resources():
         "resources": resources,
         "raw_dir": str(raw_dir),
         "tiles_dir": str(tiles_img_dir.parent),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Benchmark Datasets Catalog
+# ---------------------------------------------------------------------------
+
+@app.get("/datasets", tags=["Datasets"])
+async def list_benchmark_datasets():
+    """
+    Return a curated catalog of benchmark datasets for drone orthophoto
+    segmentation, with dynamic local-availability checks.
+    """
+    base_dir = Path(__file__).resolve().parent.parent
+    data_dir = base_dir / "data"
+    tiles_img_dir = base_dir / "data" / "tiles" / "images"
+    tiles_mask_dir = base_dir / "data" / "tiles" / "masks"
+    alt_tiles_img_dir = base_dir / "data" / "tiles" / "tiles" / "images"
+    alt_tiles_mask_dir = base_dir / "data" / "tiles" / "tiles" / "masks"
+
+    def _count_tiles(prefix: str, *dirs: Path, exts=(".png", ".tif", ".tiff", ".jpg", ".jpeg")) -> int:
+        total = 0
+        for directory in dirs:
+            if directory.is_dir():
+                total += sum(
+                    1 for f in directory.iterdir()
+                    if f.name.lower().startswith(prefix) and f.suffix.lower() in exts
+                )
+        return total
+
+    def _dir_exists_nonempty(p: Path) -> bool:
+        return p.is_dir() and any(p.iterdir())
+
+    def _file_exists(p: Path) -> bool:
+        return p.is_file()
+
+    catalog = [
+        {
+            "id": "isprs_potsdam",
+            "name": "ISPRS Potsdam",
+            "description": "High-resolution urban aerial imagery over Potsdam, Germany. 38 tiles at 6000x6000 px with 6 semantic classes. The gold standard for urban remote sensing benchmarks.",
+            "sensor": "Aerial (Airplane)",
+            "platform": "Manned Aircraft",
+            "classes": ["Impervious Surface", "Building", "Low Vegetation", "Tree", "Car", "Clutter"],
+            "num_classes": 6,
+            "resolution_gsd": "5 cm/px",
+            "spatial_coverage": "Potsdam, Germany",
+            "access_url": "https://www.isprs.org/commissions/comm2/wg4/benchmark/2d-sem-label-potsdam.aspx",
+            "download_instructions": "Register at ISPRS website and download TOP (RGB) + label tiles. Place in data/potsdam/raw/",
+            "adapter_script": "preprocessing/potsdam_adapter.py",
+            "local_dir": "data/potsdam/raw",
+            "local_available": _dir_exists_nonempty(data_dir / "potsdam" / "raw"),
+            "tile_count_images": _count_tiles("potsdam_", tiles_img_dir, alt_tiles_img_dir),
+            "tile_count_masks": _count_tiles("potsdam_", tiles_mask_dir, alt_tiles_mask_dir),
+            "thumbnail": "/data/tiles/images/potsdam_2_10_00000_00000.png" if _file_exists(tiles_img_dir / "potsdam_2_10_00000_00000.png") else None,
+        },
+        {
+            "id": "uavid",
+            "name": "UAVid Urban Drone",
+            "description": "High-resolution UAV video dataset for semantic segmentation of urban scenes. 4K oblique drone imagery with 8 classes including moving objects.",
+            "sensor": "UAV Camera (DJI)",
+            "platform": "Drone / UAV",
+            "classes": ["Background", "Building", "Road", "Tree", "Low Vegetation", "Moving Car", "Static Car", "Human"],
+            "num_classes": 8,
+            "resolution_gsd": "~2.5 cm/px",
+            "spatial_coverage": "Multiple Cities (China, USA)",
+            "access_url": "https://uavid.nl/",
+            "download_instructions": "Download from uavid.nl (registration required). Extract to data/uavid/ with train/ and valid/ subfolders.",
+            "adapter_script": "preprocessing/uavid_adapter.py",
+            "local_dir": "data/uavid",
+            "local_available": _dir_exists_nonempty(data_dir / "uavid"),
+            "tile_count_images": _count_tiles("uavid_", tiles_img_dir, alt_tiles_img_dir),
+            "tile_count_masks": _count_tiles("uavid_", tiles_mask_dir, alt_tiles_mask_dir),
+            "thumbnail": None,
+        },
+        {
+            "id": "odm_aukerman",
+            "name": "OpenDroneMap Aukerman",
+            "description": "Community-contributed drone mapping dataset from OpenDroneMap. Dense residential neighborhood orthomosaic with visible rooftops, driveways, and tree canopy.",
+            "sensor": "Consumer Drone Camera",
+            "platform": "Drone / UAV",
+            "classes": ["Background", "Building", "Road", "Vegetation"],
+            "num_classes": 4,
+            "resolution_gsd": "~3 cm/px",
+            "spatial_coverage": "Aukerman, USA",
+            "access_url": "https://github.com/OpenDroneMap/ODMdata",
+            "download_instructions": "Clone ODMdata repo or download orthophoto. Place .tif in data/raw/",
+            "adapter_script": None,
+            "local_dir": "data/raw",
+            "local_available": _file_exists(data_dir / "raw" / "odm_aukerman_orthophoto.tif"),
+            "tile_count_images": 0,
+            "tile_count_masks": 0,
+            "thumbnail": None,
+        },
+        {
+            "id": "isprs_vaihingen",
+            "name": "ISPRS Vaihingen",
+            "description": "Urban classification benchmark over Vaihingen, Germany. Smaller tiles than Potsdam at 9 cm GSD with IRRG (Infrared-Red-Green) channels and DSM.",
+            "sensor": "Aerial (Airplane)",
+            "platform": "Manned Aircraft",
+            "classes": ["Impervious Surface", "Building", "Low Vegetation", "Tree", "Car", "Clutter"],
+            "num_classes": 6,
+            "resolution_gsd": "9 cm/px",
+            "spatial_coverage": "Vaihingen, Germany",
+            "access_url": "https://www.isprs.org/commissions/comm2/wg4/benchmark/2d-sem-label-vaihingen.aspx",
+            "download_instructions": "Register at ISPRS website and download IRRG + label tiles. Note: uses IR-R-G channels, not RGB.",
+            "adapter_script": None,
+            "local_dir": "data/vaihingen",
+            "local_available": _dir_exists_nonempty(data_dir / "vaihingen") if (data_dir / "vaihingen").exists() else False,
+            "tile_count_images": 0,
+            "tile_count_masks": 0,
+            "thumbnail": None,
+        },
+        {
+            "id": "landcover_ai",
+            "name": "LandCover.ai",
+            "description": "Polish aerial orthoimagery dataset for land cover mapping. 41 large orthophotos with building and woodland polygon annotations.",
+            "sensor": "Aerial (Airplane)",
+            "platform": "Manned Aircraft",
+            "classes": ["Background", "Building", "Woodland", "Water", "Road"],
+            "num_classes": 5,
+            "resolution_gsd": "25-50 cm/px",
+            "spatial_coverage": "Poland (Central Europe)",
+            "access_url": "https://landcover.ai/",
+            "download_instructions": "Download from landcover.ai. Extract images/ and masks/ folders to data/landcover_ai/",
+            "adapter_script": None,
+            "local_dir": "data/landcover_ai",
+            "local_available": _dir_exists_nonempty(data_dir / "landcover_ai") if (data_dir / "landcover_ai").exists() else False,
+            "tile_count_images": 0,
+            "tile_count_masks": 0,
+            "thumbnail": None,
+        },
+        {
+            "id": "mass_buildings",
+            "name": "Massachusetts Buildings",
+            "description": "Large-scale aerial building segmentation dataset from the greater Boston area. 151 images at 1500x1500 px with binary building masks.",
+            "sensor": "Aerial (Airplane)",
+            "platform": "Manned Aircraft",
+            "classes": ["Background", "Building"],
+            "num_classes": 2,
+            "resolution_gsd": "100 cm/px (1 m/px)",
+            "spatial_coverage": "Massachusetts, USA",
+            "access_url": "https://www.cs.toronto.edu/~vmnih/data/",
+            "download_instructions": "Download from Mnih's webpage. Extract train/test/valid splits to data/mass_buildings/",
+            "adapter_script": None,
+            "local_dir": "data/mass_buildings",
+            "local_available": _dir_exists_nonempty(data_dir / "mass_buildings") if (data_dir / "mass_buildings").exists() else False,
+            "tile_count_images": 0,
+            "tile_count_masks": 0,
+            "thumbnail": None,
+        },
+        {
+            "id": "spacenet2_vegas",
+            "name": "SpaceNet 2 Buildings (Vegas)",
+            "description": "Satellite imagery over Las Vegas with building footprint labels from the SpaceNet challenge. RGB + 8-band multispectral imagery with vector labels.",
+            "sensor": "Satellite (WorldView-3)",
+            "platform": "Satellite",
+            "classes": ["Background", "Building"],
+            "num_classes": 2,
+            "resolution_gsd": "~30 cm/px",
+            "spatial_coverage": "Las Vegas, Nevada, USA",
+            "access_url": "https://spacenet.ai/spacenet-buildings-dataset-v2/",
+            "download_instructions": "aws s3 cp s3://spacenet-dataset/spacenet/SN2_buildings/tarballs/AOI_2_Vegas_test_public.tar.gz . --no-sign-request",
+            "adapter_script": None,
+            "local_dir": "data/spacenet2",
+            "local_available": _dir_exists_nonempty(data_dir / "spacenet2") if (data_dir / "spacenet2").exists() else False,
+            "tile_count_images": 0,
+            "tile_count_masks": 0,
+            "thumbnail": None,
+        },
+        {
+            "id": "demo_residential",
+            "name": "Demo Residential Ortho",
+            "description": "Built-in demo orthophoto with paired label mask for quick testing of the pipeline. Small residential area with buildings, roads, and vegetation.",
+            "sensor": "Consumer Drone Camera",
+            "platform": "Drone / UAV",
+            "classes": ["Background", "Building", "Road", "Vegetation"],
+            "num_classes": 4,
+            "resolution_gsd": "~5 cm/px",
+            "spatial_coverage": "Residential Area (Demo)",
+            "access_url": None,
+            "download_instructions": "Included with project. Already in data/raw/",
+            "adapter_script": None,
+            "local_dir": "data/raw",
+            "local_available": _file_exists(data_dir / "raw" / "demo_residential_ortho.tif"),
+            "tile_count_images": _count_tiles("demo_residential", tiles_img_dir, alt_tiles_img_dir),
+            "tile_count_masks": _count_tiles("demo_residential", tiles_mask_dir, alt_tiles_mask_dir),
+            "thumbnail": None,
+        },
+    ]
+
+    # Compute summary stats
+    total_datasets = len(catalog)
+    available_count = sum(1 for d in catalog if d["local_available"])
+    total_tiles = sum(d["tile_count_images"] for d in catalog)
+    labeled_count = sum(1 for d in catalog if d["tile_count_masks"] > 0)
+
+    return {
+        "total_datasets": total_datasets,
+        "available_locally": available_count,
+        "total_tiles": total_tiles,
+        "datasets_with_labels": labeled_count,
+        "catalog": catalog,
     }
 
 

@@ -31,6 +31,13 @@ from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+DEMO_NAME_PREFIXES = ("demo", "demo_residential")
+
+
+def _is_demo_tile(path: Path) -> bool:
+    name = path.name.lower().replace("-", "_")
+    return name.startswith(DEMO_NAME_PREFIXES)
+
 
 # ---------------------------------------------------------------------------
 # Core analysis
@@ -69,11 +76,11 @@ def analyze_dataset(
     num_classes = int(cfg.dataset.num_classes)
 
     # --- Discover tiles ---
-    img_paths = sorted(img_dir.glob("*.tif"))
+    img_paths = [p for p in sorted(img_dir.glob("*.tif")) if not _is_demo_tile(p)]
     if not img_paths:
-        img_paths = sorted(img_dir.glob("*.png"))
+        img_paths = [p for p in sorted(img_dir.glob("*.png")) if not _is_demo_tile(p)]
     if not img_paths:
-        raise FileNotFoundError(f"No tile images found in {img_dir}")
+        raise FileNotFoundError(f"No live tile images found in {img_dir}")
 
     logger.info(f"Found {len(img_paths)} image tiles in {img_dir}")
 
@@ -221,11 +228,11 @@ def generate_sample_grid(
     mask_dir = Path(mask_dir)
     output_path = Path(output_path)
 
-    img_paths = sorted(img_dir.glob("*.tif"))
+    img_paths = [p for p in sorted(img_dir.glob("*.tif")) if not _is_demo_tile(p)]
     if not img_paths:
-        img_paths = sorted(img_dir.glob("*.png"))
+        img_paths = [p for p in sorted(img_dir.glob("*.png")) if not _is_demo_tile(p)]
     if not img_paths:
-        logger.warning("No tiles found for sample grid.")
+        logger.warning("No live tiles found for sample grid.")
         return
 
     n = min(max_samples, len(img_paths))

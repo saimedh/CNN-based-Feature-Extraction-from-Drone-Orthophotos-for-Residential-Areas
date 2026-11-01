@@ -77,12 +77,12 @@
     </div>
     <div class="hero-stats-row">
       <div class="hero-stat">
-        <span class="hero-stat-num" data-target="75">0</span><span class="hero-stat-pct">%</span>
+        <span class="hero-stat-num" id="hero-building-iou">—</span><span class="hero-stat-pct">%</span>
         <span class="hero-stat-lbl">Building IoU</span>
       </div>
       <div class="hero-stat-divider"></div>
       <div class="hero-stat">
-        <span class="hero-stat-num" data-target="80">0</span><span class="hero-stat-pct">%</span>
+        <span class="hero-stat-num" id="hero-road-f1">—</span><span class="hero-stat-pct">%</span>
         <span class="hero-stat-lbl">Road F1 Score</span>
       </div>
       <div class="hero-stat-divider"></div>
@@ -311,8 +311,8 @@
   <div class="section-inner">
     <div class="section-header">
       <span class="section-tag"><i data-lucide="bar-chart-2"></i> Empirical Evaluation</span>
-      <h2 class="section-title">Existing vs. Proposed Model Accuracy</h2>
-      <p class="section-sub">State-of-the-art segmentation benchmarks across remote sensing datasets</p>
+      <h2 class="section-title">Live Model Accuracy</h2>
+      <p class="section-sub" id="home-accuracy-sub">Measured IoU / F1 from last evaluation or multi-model train — not demo numbers</p>
     </div>
 
     <div style="overflow-x:auto; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; box-shadow: var(--shadow-card);">
@@ -330,83 +330,9 @@
             <th style="padding:12px 14px;">FPS</th>
           </tr>
         </thead>
-        <tbody>
-          <tr style="background:rgba(99,102,241,0.14); border-bottom:1px solid var(--border); font-weight:600;">
-            <td style="padding:12px 14px; color:#38bdf8;"><strong>OrthoSeg (DeepLabV3+ ResNet50) ⭐</strong></td>
-            <td style="padding:12px 14px;">Proposed (This Work)</td>
-            <td style="padding:12px 14px;">UAVid + ODM Multi-Site</td>
-            <td style="padding:12px 14px; color:#10b981;">76.8%</td>
-            <td style="padding:12px 14px;">83.4%</td>
-            <td style="padding:12px 14px;">70.2%</td>
-            <td style="padding:12px 14px;">74.6%</td>
-            <td style="padding:12px 14px; color:#10b981;">86.9%</td>
-            <td style="padding:12px 14px;">31 fps</td>
-          </tr>
-          <tr style="background:rgba(99,102,241,0.08); border-bottom:1px solid var(--border);">
-            <td style="padding:12px 14px; color:#6366f1;"><strong>OrthoSeg (U-Net ResNet34) ✅</strong></td>
-            <td style="padding:12px 14px;">Proposed (This Work)</td>
-            <td style="padding:12px 14px;">ODM Aukerman</td>
-            <td style="padding:12px 14px; color:#10b981;">73.2%</td>
-            <td style="padding:12px 14px;">80.6%</td>
-            <td style="padding:12px 14px;">65.8%</td>
-            <td style="padding:12px 14px;">63.0%</td>
-            <td style="padding:12px 14px; color:#10b981;">84.5%</td>
-            <td style="padding:12px 14px;">42 fps</td>
-          </tr>
-          <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
-            <td style="padding:12px 14px;">MAnet (Attention)</td>
-            <td style="padding:12px 14px; color:var(--text-muted);">Fan et al. (2020)</td>
-            <td style="padding:12px 14px;">ISPRS Vaihingen</td>
-            <td style="padding:12px 14px;">74.1%</td>
-            <td style="padding:12px 14px;">81.5%</td>
-            <td style="padding:12px 14px;">67.3%</td>
-            <td style="padding:12px 14px;">71.2%</td>
-            <td style="padding:12px 14px;">84.8%</td>
-            <td style="padding:12px 14px;">21 fps</td>
-          </tr>
-          <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
-            <td style="padding:12px 14px;">Vanilla U-Net</td>
-            <td style="padding:12px 14px; color:var(--text-muted);">Ronneberger (2015)</td>
-            <td style="padding:12px 14px;">ISPRS Vaihingen</td>
-            <td style="padding:12px 14px;">71.5%</td>
-            <td style="padding:12px 14px;">78.2%</td>
-            <td style="padding:12px 14px;">62.4%</td>
-            <td style="padding:12px 14px;">68.1%</td>
-            <td style="padding:12px 14px;">82.9%</td>
-            <td style="padding:12px 14px;">45 fps</td>
-          </tr>
-          <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
-            <td style="padding:12px 14px;">PSPNet</td>
-            <td style="padding:12px 14px; color:var(--text-muted);">Zhao et al. (2017)</td>
-            <td style="padding:12px 14px;">UAVid Benchmark</td>
-            <td style="padding:12px 14px;">68.5%</td>
-            <td style="padding:12px 14px;">74.0%</td>
-            <td style="padding:12px 14px;">63.2%</td>
-            <td style="padding:12px 14px;">70.5%</td>
-            <td style="padding:12px 14px;">81.0%</td>
-            <td style="padding:12px 14px;">28 fps</td>
-          </tr>
-          <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
-            <td style="padding:12px 14px;">DeepLabV3+ (ResNet50)</td>
-            <td style="padding:12px 14px; color:var(--text-muted);">Chen et al. (2018)</td>
-            <td style="padding:12px 14px;">UAVid Benchmark</td>
-            <td style="padding:12px 14px;">67.0%</td>
-            <td style="padding:12px 14px;">75.1%</td>
-            <td style="padding:12px 14px;">65.8%</td>
-            <td style="padding:12px 14px;">72.3%</td>
-            <td style="padding:12px 14px;">80.1%</td>
-            <td style="padding:12px 14px;">24 fps</td>
-          </tr>
+        <tbody id="home-accuracy-tbody">
           <tr>
-            <td style="padding:12px 14px;">SegNet</td>
-            <td style="padding:12px 14px; color:var(--text-muted);">Badrinarayanan (2017)</td>
-            <td style="padding:12px 14px;">ISPRS Potsdam</td>
-            <td style="padding:12px 14px;">65.3%</td>
-            <td style="padding:12px 14px;">72.0%</td>
-            <td style="padding:12px 14px;">58.7%</td>
-            <td style="padding:12px 14px;">64.2%</td>
-            <td style="padding:12px 14px;">78.4%</td>
-            <td style="padding:12px 14px;">32 fps</td>
+            <td colspan="9" style="padding:16px; color:var(--text-muted); text-align:center;">Loading live accuracy...</td>
           </tr>
         </tbody>
       </table>
@@ -562,7 +488,95 @@
     if (window.lucide) lucide.createIcons();
     animateCounters();
     initScrollAnimations();
+    loadLiveAccuracy();
   });
+
+  function pct(v, alreadyPercent) {
+    if (v == null || Number.isNaN(Number(v))) return 'N/A';
+    const n = Number(v);
+    const shown = alreadyPercent ? n : n * 100;
+    return `${shown.toFixed(1)}%`;
+  }
+
+  async function loadLiveAccuracy() {
+    const tbody = document.getElementById('home-accuracy-tbody');
+    const sub = document.getElementById('home-accuracy-sub');
+    const rows = [];
+
+    try {
+      const accRes = await fetch('/model/accuracy', { signal: AbortSignal.timeout(8000) });
+      if (accRes.ok) {
+        const data = await accRes.json();
+        const bldg = data.per_class?.building?.iou;
+        const roadF1 = data.per_class?.road?.f1;
+        const bldgEl = document.getElementById('hero-building-iou');
+        const roadEl = document.getElementById('hero-road-f1');
+        if (bldgEl) bldgEl.textContent = bldg == null ? '—' : (Number(bldg) * 100).toFixed(0);
+        if (roadEl) roadEl.textContent = roadF1 == null ? '—' : (Number(roadF1) * 100).toFixed(0);
+
+        if (data.mean_iou != null || data.metrics_source === 'test_split_evaluation') {
+          rows.push({
+            name: `${data.model_architecture || 'CNN'} + ${data.encoder || ''}`.trim(),
+            source: data.metrics_source || 'live eval',
+            dataset: data.split || data.run_id || 'checkpoint eval',
+            miou: pct(data.mean_iou),
+            bldg: pct(data.per_class?.building?.iou),
+            road: pct(data.per_class?.road?.iou),
+            veg: pct(data.per_class?.vegetation?.iou),
+            f1: pct(data.mean_f1),
+            fps: '—',
+            highlight: true,
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Live accuracy fetch failed', e);
+    }
+
+    try {
+      const mmRes = await fetch('/analysis/multi-model-accuracy', { signal: AbortSignal.timeout(8000) });
+      if (mmRes.ok) {
+        const report = await mmRes.json();
+        (report.models || []).forEach((m, i) => {
+          rows.push({
+            name: m.name,
+            source: m.metrics_source || 'tiled_dataset_eval',
+            dataset: `${report.epochs || ''} epoch train`.trim(),
+            miou: pct(m.mean_iou_pct, true),
+            bldg: pct(m.class_breakdown?.building?.iou, true),
+            road: pct(m.class_breakdown?.road?.iou, true),
+            veg: pct(m.class_breakdown?.vegetation?.iou, true),
+            f1: pct(m.mean_f1_pct, true),
+            fps: m.inference_fps != null ? `${m.inference_fps} fps` : '—',
+            highlight: i === 0,
+          });
+        });
+      }
+    } catch (e) {
+      console.warn('Multi-model accuracy not available yet', e);
+    }
+
+    if (!tbody) return;
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="9" style="padding:16px;color:var(--text-muted);text-align:center;">No measured accuracy yet. Upload a paired mask or run evaluation / multi-model train.</td></tr>';
+      if (sub) sub.textContent = 'Waiting for live evaluation metrics';
+      return;
+    }
+    tbody.innerHTML = rows.map((r, i) => `
+      <tr style="${r.highlight ? 'background:rgba(99,102,241,0.12);font-weight:600;' : ''} border-bottom:1px solid var(--border);">
+        <td style="padding:12px 14px; color:#38bdf8;">${r.name}</td>
+        <td style="padding:12px 14px;">${r.source}</td>
+        <td style="padding:12px 14px;">${r.dataset}</td>
+        <td style="padding:12px 14px; color:#10b981;">${r.miou}</td>
+        <td style="padding:12px 14px;">${r.bldg}</td>
+        <td style="padding:12px 14px;">${r.road}</td>
+        <td style="padding:12px 14px;">${r.veg}</td>
+        <td style="padding:12px 14px;">${r.f1}</td>
+        <td style="padding:12px 14px;">${r.fps}</td>
+      </tr>
+    `).join('');
+    if (sub) sub.textContent = `${rows.length} live accuracy row(s) from evaluation / training`;
+  }
 
   // Animated counters in hero
   function animateCounters() {
